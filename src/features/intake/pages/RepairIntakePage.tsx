@@ -11,7 +11,7 @@ import { Input } from "@/shared/components/ui/Input";
 import { Select } from "@/shared/components/ui/Select";
 import { Textarea } from "@/shared/components/ui/Textarea";
 
-type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "billingHistory";
+type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "billingHistory" | "repairMaintenance";
 
 type CustomerDetails = {
   customerName: string;
@@ -37,6 +37,7 @@ type ItemPhoto = {
 
 type RepairItem = {
   id: string;
+  repairItemId?: number;
   workItemId: string;
   itemName: string;
   serialNo: string;
@@ -47,6 +48,7 @@ type RepairItem = {
   discount: number;
   warrantyDays: number;
   photos: ItemPhoto[];
+  technicianNames?: string;
 };
 
 type BillingDetails = {
@@ -96,6 +98,76 @@ type BillDetail = PersistedBillDetails & {
   grandTotal: number;
   amountPaid: number;
   balance: number;
+  technicianNames: string;
+};
+
+type Employee = {
+  employeeId: number;
+  employeeCode: string;
+  name: string;
+  mobile: string;
+  status: string;
+};
+
+type MaintenanceRepairItem = {
+  repairItemId: number;
+  itemName: string;
+  serialNo: string;
+  description: string;
+  status: string;
+  technicianNames: string;
+};
+
+type MaintenanceBill = {
+  billId: number;
+  billNumber: string;
+  repairNumber: string;
+  customerName: string;
+  mobile: string;
+  grandTotal: number;
+  balance: number;
+  paymentStatus: string;
+  items: MaintenanceRepairItem[];
+};
+
+type JobCard = {
+  header: {
+    repairItemId: number;
+    billNumber: string;
+    repairNumber: string;
+    customerName: string;
+    itemName: string;
+    serialNo: string;
+    description: string;
+    status: string;
+  };
+  assignments: Array<{
+    assignmentId: number;
+    employeeId: number;
+    employeeName: string;
+    assignedBy: string;
+    assignedOn: string;
+    releasedOn: string | null;
+    active: boolean;
+  }>;
+  activities: Array<{
+    activityId: number;
+    employeeName: string;
+    activityType: string;
+    startTime: string;
+    endTime: string | null;
+    durationMinutes: number | null;
+    remarks: string;
+  }>;
+  statusHistory: Array<{
+    oldStatus: string | null;
+    newStatus: string;
+    changedBy: string;
+    changedOn: string;
+    remarks: string;
+  }>;
+  attachments: Array<{ attachmentId: number; fileName: string; filePath: string; attachmentType: string }>;
+  parts: Array<{ repairPartId: number; partName: string; quantity: number; unitPrice: number; totalPrice: number }>;
 };
 
 type RepairMeta = {
@@ -126,9 +198,9 @@ const steps: Array<{ key: IntakeStep; label: string }> = [
 ];
 
 const workflowSteps = steps.filter((entry) => entry.key !== "billingHistory");
-const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory"];
+const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory", "repairMaintenance"];
 
-const navigationMenuItems = ["Home", "Employees", "Repair History", "Billing History", "Customers"];
+const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Repair History", "Billing History", "Customers"];
 
 const workItemOptions: WorkItemOption[] = [
   {
@@ -367,6 +439,28 @@ async function addBillPayment(billId: number, payment: PaymentDetails) {
   return response.data;
 }
 
+async function searchMaintenanceBills(query: string) {
+  const response = await httpClient.get<MaintenanceBill[]>("/repair-maintenance/bills/search", {
+    params: { query },
+  });
+  return response.data;
+}
+
+async function getEmployees() {
+  const response = await httpClient.get<Employee[]>("/repair-maintenance/employees");
+  return response.data;
+}
+
+async function getJobCard(repairItemId: number) {
+  const response = await httpClient.get<JobCard>(`/repair-maintenance/repair-items/${repairItemId}/job-card`);
+  return response.data;
+}
+
+async function assignRepairItem(repairItemId: number, employeeId: number, remarks: string) {
+  const response = await httpClient.post(`/repair-maintenance/repair-items/${repairItemId}/assignments`, { employeeId, remarks });
+  return response.data;
+}
+
 type BillPrintLayoutProps = {
   companyName: string;
   logoUrl?: string | null;
@@ -381,6 +475,7 @@ type BillPrintLayoutProps = {
   grandTotal: number;
   payment: PaymentDetails;
   balance: number;
+  technicianNames: string;
 };
 
 function BillPrintLayout({
@@ -397,6 +492,7 @@ function BillPrintLayout({
   grandTotal,
   payment,
   balance,
+  technicianNames,
 }: BillPrintLayoutProps) {
   const [previewPhoto, setPreviewPhoto] = useState<ItemPhoto | null>(null);
   const firstWarranty = items.find((item) => item.warrantyDays > 0)?.warrantyDays ?? 0;
@@ -483,7 +579,7 @@ function BillPrintLayout({
           <span>Admin</span>
           <span>Technician</span>
           <span>:</span>
-          <span>-</span>
+          <span>{technicianNames || "-"}</span>
           <span>Payment Status</span>
           <span>:</span>
           <span className="text-[#075db3]">{paymentStatus}</span>
@@ -662,6 +758,14 @@ export function RepairIntakePage() {
   const [isSearchingBills, setIsSearchingBills] = useState(false);
   const [billSearchQuery, setBillSearchQuery] = useState("");
   const [billSearchResults, setBillSearchResults] = useState<BillSearchResult[]>([]);
+  const [maintenanceSearchQuery, setMaintenanceSearchQuery] = useState("");
+  const [maintenanceBills, setMaintenanceBills] = useState<MaintenanceBill[]>([]);
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [selectedRepairItem, setSelectedRepairItem] = useState<MaintenanceRepairItem | null>(null);
+  const [selectedJobCard, setSelectedJobCard] = useState<JobCard | null>(null);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
+  const [assignmentRemarks, setAssignmentRemarks] = useState("");
+  const [isLoadingMaintenance, setIsLoadingMaintenance] = useState(false);
   const [loadedBill, setLoadedBill] = useState<BillDetail | null>(() => savedDraft.loadedBill);
   const [previousAmountPaid, setPreviousAmountPaid] = useState(() => savedDraft.previousAmountPaid);
   const [customer, setCustomer] = useState<CustomerDetails>(() => savedDraft.customer);
@@ -691,6 +795,7 @@ export function RepairIntakePage() {
   const repairNumber = persistedBill?.repairNumber ?? "REP-DRAFT";
   const companyName = session?.user.company?.name ?? "RepairHub Service Center";
   const logoUrl = session?.user.company?.logoUrl ?? null;
+  const technicianNames = loadedBill?.technicianNames || items.map((item) => item.technicianNames).filter(Boolean).join(", ");
 
   useEffect(() => {
     storage.set<IntakeDraft>(draftStorageKey, {
@@ -734,6 +839,74 @@ export function RepairIntakePage() {
     setBillSearchQuery("");
     setBillSearchResults([]);
     goTo("billingHistory");
+  };
+
+  const openRepairMaintenance = async () => {
+    setIsMenuOpen(false);
+    setIsLoadingMaintenance(true);
+    try {
+      setEmployees(await getEmployees());
+      goTo("repairMaintenance");
+    } catch (error) {
+      console.error("Unable to load repair maintenance.", error);
+      window.alert("Unable to load repair maintenance. Please check the service and try again.");
+    } finally {
+      setIsLoadingMaintenance(false);
+    }
+  };
+
+  const handleMaintenanceSearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = maintenanceSearchQuery.trim();
+    if (!query || isLoadingMaintenance) return;
+
+    setIsLoadingMaintenance(true);
+    try {
+      setMaintenanceBills(await searchMaintenanceBills(query));
+      setSelectedRepairItem(null);
+      setSelectedJobCard(null);
+    } catch (error) {
+      console.error("Unable to search repair jobs.", error);
+      window.alert("Unable to search repair jobs. Please check the service and try again.");
+    } finally {
+      setIsLoadingMaintenance(false);
+    }
+  };
+
+  const openJobCard = async (item: MaintenanceRepairItem) => {
+    setSelectedRepairItem(item);
+    setIsLoadingMaintenance(true);
+    try {
+      setSelectedJobCard(await getJobCard(item.repairItemId));
+    } catch (error) {
+      console.error("Unable to open job card.", error);
+      window.alert("Unable to open job card. Please check the service and try again.");
+    } finally {
+      setIsLoadingMaintenance(false);
+    }
+  };
+
+  const assignSelectedRepairItem = async () => {
+    if (!selectedRepairItem || !selectedEmployeeId) return;
+
+    setIsLoadingMaintenance(true);
+    try {
+      await assignRepairItem(selectedRepairItem.repairItemId, Number(selectedEmployeeId), assignmentRemarks);
+      setAssignmentRemarks("");
+      const [updatedBills, updatedJobCard] = await Promise.all([
+        maintenanceSearchQuery.trim() ? searchMaintenanceBills(maintenanceSearchQuery.trim()) : Promise.resolve(maintenanceBills),
+        getJobCard(selectedRepairItem.repairItemId),
+      ]);
+      setMaintenanceBills(updatedBills);
+      setSelectedJobCard(updatedJobCard);
+      const updatedItem = updatedBills.flatMap((bill) => bill.items).find((item) => item.repairItemId === selectedRepairItem.repairItemId);
+      if (updatedItem) setSelectedRepairItem(updatedItem);
+    } catch (error) {
+      console.error("Unable to assign repair item.", error);
+      window.alert("Unable to assign repair item. Please check the service and try again.");
+    } finally {
+      setIsLoadingMaintenance(false);
+    }
   };
 
   const handleBillSearch = async (event: FormEvent<HTMLFormElement>) => {
@@ -948,6 +1121,8 @@ export function RepairIntakePage() {
                           setIsMenuOpen(false);
                           if (item === "Home") {
                             startNewCustomer();
+                          } else if (item === "Repair Maintenance") {
+                            void openRepairMaintenance();
                           } else if (item === "Billing History") {
                             openBillingHistory();
                           }
@@ -1288,6 +1463,167 @@ export function RepairIntakePage() {
             </section>
           ) : null}
 
+          {step === "repairMaintenance" ? (
+            <section className="rounded-lg border bg-card p-5 shadow-soft">
+              <div className="mb-5">
+                <h2 className="text-lg font-semibold">Repair Maintenance</h2>
+                <p className="text-sm text-muted-foreground">Assign repair items to technicians and maintain job cards.</p>
+              </div>
+              <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleMaintenanceSearch}>
+                <Input
+                  aria-label="Search repair maintenance"
+                  placeholder="Bill, repair, mobile, or customer"
+                  value={maintenanceSearchQuery}
+                  onChange={(event) => setMaintenanceSearchQuery(event.target.value)}
+                />
+                <Button type="submit" isLoading={isLoadingMaintenance}>
+                  Search
+                </Button>
+              </form>
+
+              <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+                <div className="space-y-4">
+                  {maintenanceBills.length === 0 ? (
+                    <p className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                      Search a bill to assign repair work.
+                    </p>
+                  ) : (
+                    maintenanceBills.map((bill) => (
+                      <div key={bill.billId} className="rounded-md border p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold">{bill.billNumber}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {bill.repairNumber} · {bill.customerName} {bill.mobile ? `- ${bill.mobile}` : ""}
+                            </p>
+                          </div>
+                          <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{bill.paymentStatus}</span>
+                        </div>
+                        <div className="mt-4 space-y-3">
+                          {bill.items.map((item) => (
+                            <button
+                              key={item.repairItemId}
+                              type="button"
+                              className={[
+                                "grid w-full gap-2 rounded-md border px-3 py-3 text-left md:grid-cols-[1fr_auto]",
+                                selectedRepairItem?.repairItemId === item.repairItemId ? "border-primary bg-primary/5" : "hover:bg-muted",
+                              ].join(" ")}
+                              onClick={() => void openJobCard(item)}
+                            >
+                              <div>
+                                <p className="font-medium">{item.itemName}</p>
+                                <p className="text-sm text-muted-foreground">{item.serialNo || item.description || "Repair item"}</p>
+                                <p className="mt-1 text-sm">Technician: {item.technicianNames || "-"}</p>
+                              </div>
+                              <span className="rounded-md bg-secondary px-2 py-1 text-xs text-secondary-foreground">{item.status}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <aside className="h-fit rounded-md border p-4">
+                  <h3 className="text-base font-semibold">Job card</h3>
+                  {selectedRepairItem ? (
+                    <div className="mt-4 space-y-4">
+                      <div>
+                        <p className="font-medium">{selectedRepairItem.itemName}</p>
+                        <p className="text-sm text-muted-foreground">{selectedRepairItem.serialNo || selectedRepairItem.description || "Repair item"}</p>
+                      </div>
+                      <div className="grid gap-3">
+                        <FormField label="Assign / hand off to" htmlFor="assignEmployee">
+                          <Select id="assignEmployee" value={selectedEmployeeId} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
+                            <option value="">Select technician</option>
+                            {employees.map((employee) => (
+                              <option key={employee.employeeId} value={employee.employeeId}>
+                                {employee.name}
+                              </option>
+                            ))}
+                          </Select>
+                        </FormField>
+                        <FormField label="Job card remarks" htmlFor="assignmentRemarks">
+                          <Textarea
+                            id="assignmentRemarks"
+                            value={assignmentRemarks}
+                            onChange={(event) => setAssignmentRemarks(event.target.value)}
+                          />
+                        </FormField>
+                        <Button type="button" onClick={() => void assignSelectedRepairItem()} disabled={!selectedEmployeeId} isLoading={isLoadingMaintenance}>
+                          Save assignment
+                        </Button>
+                      </div>
+
+                      {selectedJobCard ? (
+                        <div className="space-y-4 text-sm">
+                          <div>
+                            <p className="font-semibold">Assignments</p>
+                            <div className="mt-2 space-y-2">
+                              {selectedJobCard.assignments.length === 0 ? (
+                                <p className="text-muted-foreground">No technician assigned yet.</p>
+                              ) : (
+                                selectedJobCard.assignments.map((assignment) => (
+                                  <div key={assignment.assignmentId} className="rounded-md border px-3 py-2">
+                                    <p className="font-medium">
+                                      {assignment.employeeName} {assignment.active ? "(Active)" : ""}
+                                    </p>
+                                    <p className="text-muted-foreground">
+                                      {formatDateTime(assignment.assignedOn)} {assignment.releasedOn ? `to ${formatDateTime(assignment.releasedOn)}` : ""}
+                                    </p>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="font-semibold">Activities</p>
+                            <div className="mt-2 space-y-2">
+                              {selectedJobCard.activities.map((activity) => (
+                                <div key={activity.activityId} className="rounded-md border px-3 py-2">
+                                  <p className="font-medium">
+                                    {activity.activityType} · {activity.employeeName}
+                                  </p>
+                                  <p className="text-muted-foreground">{formatDateTime(activity.startTime)}</p>
+                                  {activity.remarks ? <p>{activity.remarks}</p> : null}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <p className="font-semibold">Status history</p>
+                            <div className="mt-2 space-y-2">
+                              {selectedJobCard.statusHistory.map((status, index) => (
+                                <div key={`${status.changedOn}-${index}`} className="rounded-md border px-3 py-2">
+                                  <p className="font-medium">
+                                    {status.oldStatus || "-"} → {status.newStatus}
+                                  </p>
+                                  <p className="text-muted-foreground">{formatDateTime(status.changedOn)}</p>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="grid gap-3 sm:grid-cols-2">
+                            <div>
+                              <p className="font-semibold">Attachments</p>
+                              <p className="mt-1 text-muted-foreground">{selectedJobCard.attachments.length} file(s)</p>
+                            </div>
+                            <div>
+                              <p className="font-semibold">Parts</p>
+                              <p className="mt-1 text-muted-foreground">{selectedJobCard.parts.length} part(s)</p>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="mt-4 text-sm text-muted-foreground">Select a repair item to view or assign its job card.</p>
+                  )}
+                </aside>
+              </div>
+            </section>
+          ) : null}
+
           {step === "billing" ? (
             <section className="rounded-lg border bg-card p-5 shadow-soft">
               <div className="mb-5">
@@ -1442,46 +1778,49 @@ export function RepairIntakePage() {
                 grandTotal={grandTotal}
                 payment={{ ...payment, amount: totalAmountReceived }}
                 balance={balance}
+                technicianNames={technicianNames}
               />
             </section>
           ) : null}
         </section>
 
-        <aside className="no-print h-fit rounded-lg border bg-card p-5 shadow-soft xl:sticky xl:top-6">
-          <h2 className="text-base font-semibold">Bill summary</h2>
-          <div className="mt-4 space-y-3 text-sm">
-            <div className="flex justify-between gap-3">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span>{currency.format(subtotal)}</span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-muted-foreground">Discount</span>
-              <span>{currency.format(toMoney(billing.discount))}</span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-muted-foreground">Adjustment reduction</span>
-              <span className="text-destructive">-{currency.format(toMoney(billing.adjustment))}</span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-muted-foreground">Tax</span>
-              <span>{currency.format(toMoney(billing.tax))}</span>
-            </div>
-            <div className="border-t pt-3">
-              <div className="flex justify-between gap-3 text-base font-semibold">
-                <span>Grand total</span>
-                <span>{currency.format(grandTotal)}</span>
+        {["items", "billing", "payment", "final"].includes(step) ? (
+          <aside className="no-print h-fit rounded-lg border bg-card p-5 shadow-soft xl:sticky xl:top-6">
+            <h2 className="text-base font-semibold">Bill summary</h2>
+            <div className="mt-4 space-y-3 text-sm">
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Subtotal</span>
+                <span>{currency.format(subtotal)}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Discount</span>
+                <span>{currency.format(toMoney(billing.discount))}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Adjustment reduction</span>
+                <span className="text-destructive">-{currency.format(toMoney(billing.adjustment))}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Tax</span>
+                <span>{currency.format(toMoney(billing.tax))}</span>
+              </div>
+              <div className="border-t pt-3">
+                <div className="flex justify-between gap-3 text-base font-semibold">
+                  <span>Grand total</span>
+                  <span>{currency.format(grandTotal)}</span>
+                </div>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Paid</span>
+                <span>{currency.format(totalAmountReceived)}</span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-muted-foreground">Balance</span>
+                <span>{currency.format(balance)}</span>
               </div>
             </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-muted-foreground">Paid</span>
-              <span>{currency.format(totalAmountReceived)}</span>
-            </div>
-            <div className="flex justify-between gap-3">
-              <span className="text-muted-foreground">Balance</span>
-              <span>{currency.format(balance)}</span>
-            </div>
-          </div>
-        </aside>
+          </aside>
+        ) : null}
       </div>
     </main>
   );
