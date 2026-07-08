@@ -1784,43 +1784,41 @@ export function RepairIntakePage() {
           ) : null}
         </section>
 
-        {["items", "billing", "payment", "final"].includes(step) ? (
-          <aside className="no-print h-fit rounded-lg border bg-card p-5 shadow-soft xl:sticky xl:top-6">
-            <h2 className="text-base font-semibold">Bill summary</h2>
-            <div className="mt-4 space-y-3 text-sm">
-              <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span>{currency.format(subtotal)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">Discount</span>
-                <span>{currency.format(toMoney(billing.discount))}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">Adjustment reduction</span>
-                <span className="text-destructive">-{currency.format(toMoney(billing.adjustment))}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">Tax</span>
-                <span>{currency.format(toMoney(billing.tax))}</span>
-              </div>
-              <div className="border-t pt-3">
-                <div className="flex justify-between gap-3 text-base font-semibold">
-                  <span>Grand total</span>
-                  <span>{currency.format(grandTotal)}</span>
-                </div>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">Paid</span>
-                <span>{currency.format(totalAmountReceived)}</span>
-              </div>
-              <div className="flex justify-between gap-3">
-                <span className="text-muted-foreground">Balance</span>
-                <span>{currency.format(balance)}</span>
+        <aside className="no-print h-fit rounded-lg border bg-card p-5 shadow-soft xl:sticky xl:top-6">
+          <h2 className="text-base font-semibold">Bill summary</h2>
+          <div className="mt-4 space-y-3 text-sm">
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Subtotal</span>
+              <span>{currency.format(subtotal)}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Discount</span>
+              <span>{currency.format(toMoney(billing.discount))}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Adjustment reduction</span>
+              <span className="text-destructive">-{currency.format(toMoney(billing.adjustment))}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Tax</span>
+              <span>{currency.format(toMoney(billing.tax))}</span>
+            </div>
+            <div className="border-t pt-3">
+              <div className="flex justify-between gap-3 text-base font-semibold">
+                <span>Grand total</span>
+                <span>{currency.format(grandTotal)}</span>
               </div>
             </div>
-          </aside>
-        ) : null}
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Paid</span>
+              <span>{currency.format(totalAmountReceived)}</span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted-foreground">Balance</span>
+              <span>{currency.format(balance)}</span>
+            </div>
+          </div>
+        </aside>
       </div>
     </main>
   );
