@@ -299,6 +299,11 @@ function emptyDraftItem(): RepairItem {
   return { ...defaultDraftItem, photos: [] };
 }
 
+function createClientId() {
+  return globalThis.crypto?.randomUUID?.()
+    ?? `item-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
 function fileToPhoto(file: File): Promise<ItemPhoto> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -327,7 +332,9 @@ function readIntakeDraft(key: string): IntakeDraft {
     step: savedStep,
     customer: { ...defaultCustomer, ...savedDraft?.customer },
     repairMeta: { ...defaultRepairMeta, ...savedDraft?.repairMeta },
-    items: Array.isArray(savedDraft?.items) ? savedDraft.items : [],
+    items: Array.isArray(savedDraft?.items)
+      ? savedDraft.items.map((item) => ({ ...item, photos: item.photos ?? [] }))
+      : [],
     draftItem: { ...emptyDraftItem(), ...savedDraft?.draftItem, photos: savedDraft?.draftItem?.photos ?? [] },
     billing: { ...defaultBilling, ...savedDraft?.billing },
     payment: { ...defaultPayment, ...savedDraft?.payment },
@@ -928,7 +935,7 @@ export function RepairIntakePage() {
       ...current,
       {
         ...draftItem,
-        id: crypto.randomUUID(),
+        id: createClientId(),
         itemName: draftItem.itemName.trim(),
         quantity: Math.max(toMoney(draftItem.quantity), 1),
         basePrice: Math.max(toMoney(draftItem.basePrice), 0),
