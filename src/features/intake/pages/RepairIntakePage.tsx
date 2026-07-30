@@ -1,5 +1,5 @@
 import { ArrowLeft, ArrowRight, Camera, CheckCircle2, Home, LogOut, Menu, Plus, Printer, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { httpClient } from "@/lib/api/httpClient";
@@ -776,6 +776,7 @@ export function RepairIntakePage() {
   const savedDraft = useMemo(() => readIntakeDraft(draftStorageKey), [draftStorageKey]);
   const [step, setStep] = useState<IntakeStep>(() => savedDraft.step);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const navigationMenuRef = useRef<HTMLDivElement | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isSavingBill, setIsSavingBill] = useState(false);
   const [isSearchingBills, setIsSearchingBills] = useState(false);
@@ -840,6 +841,26 @@ export function RepairIntakePage() {
     (billingHistoryPage - 1) * billingHistoryPageSize,
     billingHistoryPage * billingHistoryPageSize
   );
+
+  useEffect(() => {
+    if (!isMenuOpen) return;
+    const dismissOnOutsideInteraction = (event: MouseEvent | TouchEvent) => {
+      if (!navigationMenuRef.current?.contains(event.target as Node)) {
+        setIsMenuOpen(false);
+      }
+    };
+    const dismissOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setIsMenuOpen(false);
+    };
+    document.addEventListener("mousedown", dismissOnOutsideInteraction);
+    document.addEventListener("touchstart", dismissOnOutsideInteraction);
+    document.addEventListener("keydown", dismissOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", dismissOnOutsideInteraction);
+      document.removeEventListener("touchstart", dismissOnOutsideInteraction);
+      document.removeEventListener("keydown", dismissOnEscape);
+    };
+  }, [isMenuOpen]);
 
   useEffect(() => {
     storage.set<IntakeDraft>(draftStorageKey, {
@@ -1290,7 +1311,7 @@ export function RepairIntakePage() {
         <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-3">
-              <div className="relative">
+              <div ref={navigationMenuRef} className="relative">
                 <Button
                   type="button"
                   variant="ghost"
