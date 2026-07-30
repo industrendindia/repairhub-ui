@@ -124,6 +124,8 @@ type ManagedEmployee = {
   companyCode: string;
   companyName: string;
   designation: string | null;
+  username: string | null;
+  role: string | null;
 };
 
 type EmployeeDraft = {
@@ -138,6 +140,9 @@ type EmployeeDraft = {
   status: string;
   companyCode: string;
   designation: string;
+  username: string;
+  password: string;
+  role: string;
 };
 
 type MaintenanceRepairItem = {
@@ -247,6 +252,9 @@ const emptyEmployeeDraft: EmployeeDraft = {
   status: "ACTIVE",
   companyCode: "KRISHNA",
   designation: "",
+  username: "",
+  password: "",
+  role: "USER",
 };
 
 const defaultCustomer: CustomerDetails = {
@@ -466,8 +474,8 @@ async function getEmployees() {
   return response.data;
 }
 
-async function getManagedEmployees() {
-  const response = await httpClient.get<ManagedEmployee[]>("/employees");
+async function getManagedEmployees(q: string) {
+  const response = await httpClient.get<ManagedEmployee[]>("/employees", { params: { q } });
   return response.data;
 }
 
@@ -481,6 +489,10 @@ async function saveManagedEmployee(employeeId: number | null, employee: Employee
 async function deactivateManagedEmployee(employeeId: number) {
   const response = await httpClient.delete<ManagedEmployee>(`/employees/${employeeId}`);
   return response.data;
+}
+
+async function createCompany(company: { companyCode: string; name: string; gstNumber: string; mobile: string; email: string; address: string }) {
+  await httpClient.post("/companies", company);
 }
 
 async function getWorkItems() {
@@ -768,6 +780,8 @@ export function RepairIntakePage() {
   const [maintenanceBills, setMaintenanceBills] = useState<MaintenanceBill[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [managedEmployees, setManagedEmployees] = useState<ManagedEmployee[]>([]);
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", gstNumber: "", mobile: "", email: "", address: "" });
   const [employeeDraft, setEmployeeDraft] = useState<EmployeeDraft>(emptyEmployeeDraft);
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
   const [isSavingEmployee, setIsSavingEmployee] = useState(false);
@@ -905,7 +919,7 @@ export function RepairIntakePage() {
     if (!canManageEmployees) return;
     setIsSavingEmployee(true);
     try {
-      setManagedEmployees(await getManagedEmployees());
+      setManagedEmployees([]);
       setEditingEmployeeId(null);
       setEmployeeDraft({
         ...emptyEmployeeDraft,
@@ -934,7 +948,43 @@ export function RepairIntakePage() {
       status: employee.status,
       companyCode: employee.companyCode,
       designation: employee.designation ?? "",
+      username: employee.username ?? "",
+      password: "",
+      role: employee.role ?? "USER",
     });
+  };
+
+  const searchManagedEmployees = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!employeeSearch.trim()) {
+      setManagedEmployees([]);
+      return;
+    }
+    setIsSavingEmployee(true);
+    try {
+      setManagedEmployees(await getManagedEmployees(employeeSearch));
+    } catch (error) {
+      console.error("Unable to search employees.", error);
+      window.alert("Unable to search employees.");
+    } finally {
+      setIsSavingEmployee(false);
+    }
+  };
+
+  const submitCompany = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSavingEmployee(true);
+    try {
+      await createCompany(companyDraft);
+      setEmployeeDraft((current) => ({ ...current, companyCode: companyDraft.companyCode.toUpperCase() }));
+      setCompanyDraft({ companyCode: "", name: "", gstNumber: "", mobile: "", email: "", address: "" });
+      window.alert("Company created. You can now create its owner below.");
+    } catch (error) {
+      console.error("Unable to create company.", error);
+      window.alert("Unable to create company. Check that the company code is unique.");
+    } finally {
+      setIsSavingEmployee(false);
+    }
   };
 
   const submitManagedEmployee = async (event: FormEvent<HTMLFormElement>) => {
@@ -943,7 +993,7 @@ export function RepairIntakePage() {
     setIsSavingEmployee(true);
     try {
       await saveManagedEmployee(editingEmployeeId, employeeDraft);
-      setManagedEmployees(await getManagedEmployees());
+      setManagedEmployees(employeeSearch.trim() ? await getManagedEmployees(employeeSearch) : []);
       setEditingEmployeeId(null);
       setEmployeeDraft({
         ...emptyEmployeeDraft,
@@ -962,7 +1012,7 @@ export function RepairIntakePage() {
     setIsSavingEmployee(true);
     try {
       await deactivateManagedEmployee(employee.employeeId);
-      setManagedEmployees(await getManagedEmployees());
+      setManagedEmployees(employeeSearch.trim() ? await getManagedEmployees(employeeSearch) : []);
       if (editingEmployeeId === employee.employeeId) {
         setEditingEmployeeId(null);
         setEmployeeDraft(emptyEmployeeDraft);
@@ -1704,6 +1754,35 @@ export function RepairIntakePage() {
 
           {step === "employees" && canManageEmployees ? (
             <section className="space-y-5">
+              {isSystemAdministrator ? (
+                <form className="rounded-lg border bg-card p-5 shadow-soft" onSubmit={submitCompany}>
+                  <div className="mb-5">
+                    <h2 className="text-lg font-semibold">Onboard a company</h2>
+                    <p className="text-sm text-muted-foreground">Create the shop first, then create its owner account below.</p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField label="Company code" htmlFor="newCompanyCode">
+                      <Input id="newCompanyCode" required value={companyDraft.companyCode} onChange={(event) => setCompanyDraft((current) => ({ ...current, companyCode: event.target.value }))} />
+                    </FormField>
+                    <FormField label="Company name" htmlFor="newCompanyName">
+                      <Input id="newCompanyName" required value={companyDraft.name} onChange={(event) => setCompanyDraft((current) => ({ ...current, name: event.target.value }))} />
+                    </FormField>
+                    <FormField label="GSTIN (optional)" htmlFor="newCompanyGst">
+                      <Input id="newCompanyGst" value={companyDraft.gstNumber} onChange={(event) => setCompanyDraft((current) => ({ ...current, gstNumber: event.target.value }))} />
+                    </FormField>
+                    <FormField label="Mobile" htmlFor="newCompanyMobile">
+                      <Input id="newCompanyMobile" value={companyDraft.mobile} onChange={(event) => setCompanyDraft((current) => ({ ...current, mobile: event.target.value }))} />
+                    </FormField>
+                    <FormField label="Email" htmlFor="newCompanyEmail">
+                      <Input id="newCompanyEmail" type="email" value={companyDraft.email} onChange={(event) => setCompanyDraft((current) => ({ ...current, email: event.target.value }))} />
+                    </FormField>
+                    <FormField label="Address" htmlFor="newCompanyAddress">
+                      <Input id="newCompanyAddress" value={companyDraft.address} onChange={(event) => setCompanyDraft((current) => ({ ...current, address: event.target.value }))} />
+                    </FormField>
+                  </div>
+                  <Button className="mt-5" type="submit" isLoading={isSavingEmployee}>Create company</Button>
+                </form>
+              ) : null}
               <form className="rounded-lg border bg-card p-5 shadow-soft" onSubmit={submitManagedEmployee}>
                 <div className="mb-5">
                   <h2 className="text-lg font-semibold">{editingEmployeeId ? "Edit employee" : "Create employee"}</h2>
@@ -1722,14 +1801,12 @@ export function RepairIntakePage() {
                   </FormField>
                   {isSystemAdministrator ? (
                     <FormField label="Company" htmlFor="employeeCompany">
-                      <Select
+                      <Input
                         id="employeeCompany"
                         value={employeeDraft.companyCode}
                         onChange={(event) => setEmployeeDraft((current) => ({ ...current, companyCode: event.target.value }))}
-                      >
-                        <option value="KRISHNA">Krishna</option>
-                        <option value="GOKUL">Gokul</option>
-                      </Select>
+                        placeholder="Company code"
+                      />
                     </FormField>
                   ) : null}
                   <FormField label="First name" htmlFor="employeeFirstName">
@@ -1808,6 +1885,31 @@ export function RepairIntakePage() {
                       <option value="INACTIVE">Inactive</option>
                     </Select>
                   </FormField>
+                  <FormField label="User ID" htmlFor="employeeUsername">
+                    <Input
+                      id="employeeUsername"
+                      value={employeeDraft.username}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, username: event.target.value }))}
+                    />
+                  </FormField>
+                  <FormField label={editingEmployeeId ? "New password (optional)" : "Password"} htmlFor="employeePassword">
+                    <Input
+                      id="employeePassword"
+                      type="password"
+                      value={employeeDraft.password}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, password: event.target.value }))}
+                    />
+                  </FormField>
+                  <FormField label="Login role" htmlFor="employeeRole">
+                    <Select
+                      id="employeeRole"
+                      value={employeeDraft.role}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, role: event.target.value }))}
+                    >
+                      <option value="USER">User</option>
+                      {isSystemAdministrator ? <option value="OWNER">Owner</option> : null}
+                    </Select>
+                  </FormField>
                 </div>
                 <div className="mt-5 flex flex-wrap gap-3">
                   <Button type="submit" isLoading={isSavingEmployee}>
@@ -1832,11 +1934,19 @@ export function RepairIntakePage() {
               </form>
 
               <section className="rounded-lg border bg-card p-5 shadow-soft">
-                <h2 className="text-lg font-semibold">Employees</h2>
+                <h2 className="text-lg font-semibold">Search employees</h2>
+                <form className="mt-4 flex gap-3" onSubmit={searchManagedEmployees}>
+                  <Input
+                    placeholder="User ID, employee code, or name"
+                    value={employeeSearch}
+                    onChange={(event) => setEmployeeSearch(event.target.value)}
+                  />
+                  <Button type="submit" isLoading={isSavingEmployee}>Search</Button>
+                </form>
                 <div className="mt-4 space-y-3">
                   {managedEmployees.length === 0 ? (
                     <p className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                      No employees found.
+                      Enter a user ID, employee code, or name to search.
                     </p>
                   ) : (
                     managedEmployees.map((employee) => (
