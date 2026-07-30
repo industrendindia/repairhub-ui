@@ -394,6 +394,22 @@ async function addBillPayment(billId: number, payment: PaymentDetails) {
   return response.data;
 }
 
+async function updateBillAmounts(billId: number, items: RepairItem[], billing: BillingDetails) {
+  const response = await httpClient.put<{
+    subtotal: number;
+    grandTotal: number;
+    amountPaid: number;
+    balance: number;
+    paymentStatus: string;
+  }>(`/bills/${billId}/amounts`, {
+    items,
+    discount: toMoney(billing.discount),
+    adjustment: toMoney(billing.adjustment),
+    tax: toMoney(billing.tax),
+  });
+  return response.data;
+}
+
 async function searchMaintenanceBills(query: string) {
   const response = await httpClient.get<MaintenanceBill[]>("/repair-maintenance/bills/search", {
     params: { query },
@@ -907,7 +923,7 @@ export function RepairIntakePage() {
       setPreviousAmountPaid(Number(bill.amountPaid));
       setPayment({
         paymentMode: "CASH",
-        amount: Number(bill.balance),
+        amount: 0,
         referenceNumber: "",
         remarks: "",
       });
@@ -973,7 +989,7 @@ export function RepairIntakePage() {
   const continueFromBilling = () => {
     setPayment((current) => ({
       ...current,
-      amount: current.amount || remainingAmountDue,
+      amount: loadedBill ? Math.min(toMoney(current.amount), remainingAmountDue) : current.amount || remainingAmountDue,
     }));
     goTo("payment");
   };
@@ -985,29 +1001,37 @@ export function RepairIntakePage() {
     setIsSavingBill(true);
     try {
       if (loadedBill && persistedBill) {
+        const revisedBill = await updateBillAmounts(persistedBill.billId, items, billing);
+        let updatedAmountPaid = Number(revisedBill.amountPaid);
+        let updatedBalance = Number(revisedBill.balance);
+        let updatedPaymentStatus = revisedBill.paymentStatus;
+
         if (toMoney(payment.amount) > 0) {
           const savedPayment = await addBillPayment(persistedBill.billId, payment);
-          const updatedBill = {
-            ...persistedBill,
-            paymentStatus: savedPayment.paymentStatus,
-          };
-          setPersistedBill(updatedBill);
-          setPreviousAmountPaid(Number(savedPayment.amountPaid));
-          setPayment((current) => ({
-            ...current,
-            amount: 0,
-          }));
-          setLoadedBill((current) =>
-            current
-              ? {
-                  ...current,
-                  amountPaid: Number(savedPayment.amountPaid),
-                  balance: Number(savedPayment.balance),
-                  paymentStatus: savedPayment.paymentStatus,
-                }
-              : current,
-          );
+          updatedAmountPaid = Number(savedPayment.amountPaid);
+          updatedBalance = Number(savedPayment.balance);
+          updatedPaymentStatus = savedPayment.paymentStatus;
         }
+
+        setPersistedBill((current) => current ? { ...current, paymentStatus: updatedPaymentStatus } : current);
+        setPreviousAmountPaid(updatedAmountPaid);
+        setPayment((current) => ({ ...current, amount: 0 }));
+        setLoadedBill((current) =>
+          current
+            ? {
+                ...current,
+                items,
+                subtotal: Number(revisedBill.subtotal),
+                discount: toMoney(billing.discount),
+                adjustment: toMoney(billing.adjustment),
+                tax: toMoney(billing.tax),
+                grandTotal: Number(revisedBill.grandTotal),
+                amountPaid: updatedAmountPaid,
+                balance: updatedBalance,
+                paymentStatus: updatedPaymentStatus,
+              }
+            : current,
+        );
       } else {
         const savedBill = await saveIntakeBill({
           customer,
@@ -1534,7 +1558,31 @@ export function RepairIntakePage() {
                       <p className="font-medium">{item.itemName}</p>
                       <p className="text-sm text-muted-foreground">{item.serialNo || item.description || "Repair item"}</p>
                     </div>
-                    <p className="font-semibold">{currency.format(Math.max(item.actualPrice * item.quantity - item.discount, 0))}</p>
+                    {loadedBill ? (
+                      <div className="w-36">
+                        <Input
+                          aria-label={`${item.itemName} rate`}
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={item.actualPrice}
+                          onChange={(event) =>
+                            setItems((current) =>
+                              current.map((entry) =>
+                                entry.id === item.id
+                                  ? { ...entry, actualPrice: Math.max(Number(event.target.value), 0) }
+                                  : entry,
+                              ),
+                            )
+                          }
+                        />
+                        <p className="mt-1 text-right text-xs text-muted-foreground">
+                          {currency.format(Math.max(item.actualPrice * item.quantity - item.discount, 0))}
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="font-semibold">{currency.format(Math.max(item.actualPrice * item.quantity - item.discount, 0))}</p>
+                    )}
                   </div>
                 ))}
               </div>
@@ -1583,7 +1631,7 @@ export function RepairIntakePage() {
                     id="paymentAmount"
                     required
                     type="number"
-                    min={loadedBill && remainingAmountDue <= 0 ? "0" : "0.01"}
+                    min={loadedBill ? "0" : "0.01"}
                     max={remainingAmountDue}
                     step="0.01"
                     value={payment.amount}
