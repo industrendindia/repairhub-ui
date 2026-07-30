@@ -513,6 +513,8 @@ async function assignRepairItem(repairItemId: number, employeeId: number, remark
 
 type BillPrintLayoutProps = {
   companyName: string;
+  companyAddress: string;
+  companyContact: string;
   logoUrl?: string | null;
   billNumber: string;
   repairNumber: string;
@@ -526,6 +528,8 @@ type BillPrintLayoutProps = {
 
 function BillPrintLayout({
   companyName,
+  companyAddress,
+  companyContact,
   logoUrl,
   billNumber,
   repairNumber,
@@ -575,8 +579,8 @@ function BillPrintLayout({
         <div className="leading-tight">
           <h2 className="text-[15px] font-black uppercase tracking-wide text-[#05245f]">{companyName}</h2>
           <p className="mt-1 text-[10px] font-bold">Electricals Repair & Service Center</p>
-          <p className="mt-2 text-[10px]">Dhanori, Pune - 411015, Maharashtra</p>
-          <p className="mt-1 text-[10px]">9876543210 | support@repairhub.local</p>
+          <p className="mt-2 text-[10px]">{companyAddress}</p>
+          <p className="mt-1 text-[10px]">{companyContact}</p>
           <p className="mt-2 text-[10px]">GSTIN : 27ABCDE1234F1Z1</p>
         </div>
         <div className="text-[11px] font-bold">
@@ -800,6 +804,11 @@ export function RepairIntakePage() {
   const billNumber = persistedBill?.billNumber ?? "BILL-DRAFT";
   const repairNumber = persistedBill?.repairNumber ?? "REP-DRAFT";
   const companyName = session?.user.company?.name ?? "RepairHub Service Center";
+  const isKrishnaCompany = session?.user.company?.id === "KRISHNA";
+  const companyAddress = isKrishnaCompany
+    ? "463/464, Budhwar Peth, Soba Market, (basement), Near Success Enterprises, Pune 411002"
+    : "Dhanori, Pune - 411015, Maharashtra";
+  const companyContact = isKrishnaCompany ? "Mob: 8421992222" : "9876543210 | support@repairhub.local";
   const logoUrl = session?.user.company?.logoUrl ?? null;
   const canManageEmployees = session?.user.role === "OWNER" || session?.user.role === "ADMIN";
   const isSystemAdministrator = session?.user.role === "ADMIN";
@@ -1999,6 +2008,8 @@ export function RepairIntakePage() {
               </div>
               <BillPrintLayout
                 companyName={companyName}
+                companyAddress={companyAddress}
+                companyContact={companyContact}
                 logoUrl={logoUrl}
                 billNumber={billNumber}
                 repairNumber={repairNumber}
