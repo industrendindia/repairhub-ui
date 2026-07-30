@@ -515,6 +515,7 @@ type BillPrintLayoutProps = {
   companyName: string;
   companyAddress: string;
   companyContact: string;
+  gstNumber?: string | null;
   logoUrl?: string | null;
   billNumber: string;
   repairNumber: string;
@@ -530,6 +531,7 @@ function BillPrintLayout({
   companyName,
   companyAddress,
   companyContact,
+  gstNumber,
   logoUrl,
   billNumber,
   repairNumber,
@@ -580,7 +582,7 @@ function BillPrintLayout({
           <h2 className="text-[15px] font-black uppercase tracking-wide text-[#05245f]">{companyName}</h2>
           <p className="mt-2 text-[10px]">{companyAddress}</p>
           <p className="mt-1 text-[10px]">{companyContact}</p>
-          <p className="mt-2 text-[10px]">GSTIN : 27ABCDE1234F1Z1</p>
+          {gstNumber?.trim() ? <p className="mt-2 text-[10px]">GSTIN : {gstNumber}</p> : null}
         </div>
         <div className="text-[11px] font-bold">
           <div className="mb-2 rounded bg-[#05245f] py-1 text-center text-[14px] font-black uppercase text-white">
@@ -803,11 +805,12 @@ export function RepairIntakePage() {
   const billNumber = persistedBill?.billNumber ?? "BILL-DRAFT";
   const repairNumber = persistedBill?.repairNumber ?? "REP-DRAFT";
   const companyName = session?.user.company?.name ?? "RepairHub Service Center";
-  const isKrishnaCompany = session?.user.company?.id === "KRISHNA";
-  const companyAddress = isKrishnaCompany
-    ? "463/464, Budhwar Peth, Soba Market, (basement), Near Success Enterprises, Pune 411002"
-    : "Dhanori, Pune - 411015, Maharashtra";
-  const companyContact = isKrishnaCompany ? "Mob: 8421992222" : "9876543210 | support@repairhub.local";
+  const companyAddress = session?.user.company?.address ?? "";
+  const companyContact = [
+    session?.user.company?.mobile ? `Mob: ${session.user.company.mobile}` : "",
+    session?.user.company?.email ?? "",
+  ].filter(Boolean).join(" | ");
+  const gstNumber = session?.user.company?.gstNumber ?? null;
   const logoUrl = session?.user.company?.logoUrl ?? null;
   const canManageEmployees = session?.user.role === "OWNER" || session?.user.role === "ADMIN";
   const isSystemAdministrator = session?.user.role === "ADMIN";
@@ -2009,6 +2012,7 @@ export function RepairIntakePage() {
                 companyName={companyName}
                 companyAddress={companyAddress}
                 companyContact={companyContact}
+                gstNumber={gstNumber}
                 logoUrl={logoUrl}
                 billNumber={billNumber}
                 repairNumber={repairNumber}
