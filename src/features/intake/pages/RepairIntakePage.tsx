@@ -203,6 +203,7 @@ const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingH
 
 const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Repair History", "Billing History", "Customers"];
 const billingHistoryPageSize = 10;
+const maxImageSizeBytes = 1024 * 1024;
 
 const defaultCustomer: CustomerDetails = {
   customerName: "",
@@ -1240,6 +1241,7 @@ export function RepairIntakePage() {
                       accept="image/*"
                       capture="environment"
                       multiple
+                      maxFileSizeBytes={maxImageSizeBytes}
                       onFilesChange={(files) => {
                         void Promise.all(files.map(fileToPhoto)).then((photos) =>
                           setDraftItem((current) => ({
