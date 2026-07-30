@@ -11,7 +11,7 @@ import { Input } from "@/shared/components/ui/Input";
 import { Select } from "@/shared/components/ui/Select";
 import { Textarea } from "@/shared/components/ui/Textarea";
 
-type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "billingHistory" | "repairMaintenance";
+type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "billingHistory" | "repairMaintenance" | "employees";
 
 type CustomerDetails = {
   customerName: string;
@@ -110,6 +110,36 @@ type Employee = {
   status: string;
 };
 
+type ManagedEmployee = {
+  employeeId: number;
+  employeeCode: string;
+  firstName: string;
+  lastName: string | null;
+  mobile: string | null;
+  email: string | null;
+  joiningDate: string | null;
+  salary: number | null;
+  hourlyRate: number | null;
+  status: string;
+  companyCode: string;
+  companyName: string;
+  designation: string | null;
+};
+
+type EmployeeDraft = {
+  employeeCode: string;
+  firstName: string;
+  lastName: string;
+  mobile: string;
+  email: string;
+  joiningDate: string;
+  salary: number;
+  hourlyRate: number;
+  status: string;
+  companyCode: string;
+  designation: string;
+};
+
 type MaintenanceRepairItem = {
   repairItemId: number;
   itemName: string;
@@ -199,11 +229,25 @@ const steps: Array<{ key: IntakeStep; label: string }> = [
 ];
 
 const workflowSteps = steps.filter((entry) => entry.key !== "billingHistory");
-const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory", "repairMaintenance"];
+const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory", "repairMaintenance", "employees"];
 
 const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing History"];
 const billingHistoryPageSize = 10;
 const maxImageSizeBytes = 1024 * 1024;
+
+const emptyEmployeeDraft: EmployeeDraft = {
+  employeeCode: "",
+  firstName: "",
+  lastName: "",
+  mobile: "",
+  email: "",
+  joiningDate: "",
+  salary: 0,
+  hourlyRate: 0,
+  status: "ACTIVE",
+  companyCode: "KRISHNA",
+  designation: "",
+};
 
 const defaultCustomer: CustomerDetails = {
   customerName: "",
@@ -419,6 +463,23 @@ async function searchMaintenanceBills(query: string) {
 
 async function getEmployees() {
   const response = await httpClient.get<Employee[]>("/repair-maintenance/employees");
+  return response.data;
+}
+
+async function getManagedEmployees() {
+  const response = await httpClient.get<ManagedEmployee[]>("/employees");
+  return response.data;
+}
+
+async function saveManagedEmployee(employeeId: number | null, employee: EmployeeDraft) {
+  const response = employeeId
+    ? await httpClient.put<ManagedEmployee>(`/employees/${employeeId}`, employee)
+    : await httpClient.post<ManagedEmployee>("/employees", employee);
+  return response.data;
+}
+
+async function deactivateManagedEmployee(employeeId: number) {
+  const response = await httpClient.delete<ManagedEmployee>(`/employees/${employeeId}`);
   return response.data;
 }
 
@@ -701,6 +762,10 @@ export function RepairIntakePage() {
   const [maintenanceSearchQuery, setMaintenanceSearchQuery] = useState("");
   const [maintenanceBills, setMaintenanceBills] = useState<MaintenanceBill[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [managedEmployees, setManagedEmployees] = useState<ManagedEmployee[]>([]);
+  const [employeeDraft, setEmployeeDraft] = useState<EmployeeDraft>(emptyEmployeeDraft);
+  const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
+  const [isSavingEmployee, setIsSavingEmployee] = useState(false);
   const [workItemOptions, setWorkItemOptions] = useState<WorkItemOption[]>([]);
   const [selectedRepairItem, setSelectedRepairItem] = useState<MaintenanceRepairItem | null>(null);
   const [selectedJobCard, setSelectedJobCard] = useState<JobCard | null>(null);
@@ -736,6 +801,8 @@ export function RepairIntakePage() {
   const repairNumber = persistedBill?.repairNumber ?? "REP-DRAFT";
   const companyName = session?.user.company?.name ?? "RepairHub Service Center";
   const logoUrl = session?.user.company?.logoUrl ?? null;
+  const canManageEmployees = session?.user.role === "OWNER" || session?.user.role === "ADMIN";
+  const isSystemAdministrator = session?.user.role === "ADMIN";
   const billingHistoryPageCount = Math.max(Math.ceil(billSearchResults.length / billingHistoryPageSize), 1);
   const pagedBillSearchResults = billSearchResults.slice(
     (billingHistoryPage - 1) * billingHistoryPageSize,
@@ -819,6 +886,81 @@ export function RepairIntakePage() {
       window.alert("Unable to load repair maintenance. Please check the service and try again.");
     } finally {
       setIsLoadingMaintenance(false);
+    }
+  };
+
+  const openEmployeeManagement = async () => {
+    setIsMenuOpen(false);
+    if (!canManageEmployees) return;
+    setIsSavingEmployee(true);
+    try {
+      setManagedEmployees(await getManagedEmployees());
+      setEditingEmployeeId(null);
+      setEmployeeDraft({
+        ...emptyEmployeeDraft,
+        companyCode: isSystemAdministrator ? "KRISHNA" : session?.user.company?.id ?? "",
+      });
+      goTo("employees");
+    } catch (error) {
+      console.error("Unable to load employees.", error);
+      window.alert("Owner credentials are required to manage employees.");
+    } finally {
+      setIsSavingEmployee(false);
+    }
+  };
+
+  const editManagedEmployee = (employee: ManagedEmployee) => {
+    setEditingEmployeeId(employee.employeeId);
+    setEmployeeDraft({
+      employeeCode: employee.employeeCode,
+      firstName: employee.firstName,
+      lastName: employee.lastName ?? "",
+      mobile: employee.mobile ?? "",
+      email: employee.email ?? "",
+      joiningDate: employee.joiningDate ?? "",
+      salary: Number(employee.salary ?? 0),
+      hourlyRate: Number(employee.hourlyRate ?? 0),
+      status: employee.status,
+      companyCode: employee.companyCode,
+      designation: employee.designation ?? "",
+    });
+  };
+
+  const submitManagedEmployee = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isSavingEmployee) return;
+    setIsSavingEmployee(true);
+    try {
+      await saveManagedEmployee(editingEmployeeId, employeeDraft);
+      setManagedEmployees(await getManagedEmployees());
+      setEditingEmployeeId(null);
+      setEmployeeDraft({
+        ...emptyEmployeeDraft,
+        companyCode: isSystemAdministrator ? "KRISHNA" : session?.user.company?.id ?? "",
+      });
+    } catch (error) {
+      console.error("Unable to save employee.", error);
+      window.alert("Unable to save employee. Check the employee code and try again.");
+    } finally {
+      setIsSavingEmployee(false);
+    }
+  };
+
+  const deactivateEmployee = async (employee: ManagedEmployee) => {
+    if (!window.confirm(`Deactivate ${employee.firstName} ${employee.lastName ?? ""}? Repair history will be preserved.`)) return;
+    setIsSavingEmployee(true);
+    try {
+      await deactivateManagedEmployee(employee.employeeId);
+      setManagedEmployees(await getManagedEmployees());
+      if (editingEmployeeId === employee.employeeId) {
+        setEditingEmployeeId(null);
+        setEmployeeDraft(emptyEmployeeDraft);
+      }
+    } catch (error) {
+      console.error("Unable to deactivate employee.", error);
+      window.alert("Unable to deactivate employee.");
+    } finally {
+      setIsSavingEmployee(false);
     }
   };
 
@@ -1091,7 +1233,9 @@ export function RepairIntakePage() {
                 </Button>
                 {isMenuOpen ? (
                   <nav className="absolute left-0 top-12 z-30 w-56 overflow-hidden rounded-md border bg-card py-2 shadow-soft">
-                    {navigationMenuItems.map((item) => (
+                    {navigationMenuItems
+                      .filter((item) => item !== "Employees" || canManageEmployees)
+                      .map((item) => (
                       <button
                         key={item}
                         type="button"
@@ -1102,6 +1246,8 @@ export function RepairIntakePage() {
                             startNewCustomer();
                           } else if (item === "Repair Maintenance") {
                             void openRepairMaintenance();
+                          } else if (item === "Employees") {
+                            void openEmployeeManagement();
                           } else if (item === "Billing History") {
                             void openBillingHistory();
                           }
@@ -1110,7 +1256,7 @@ export function RepairIntakePage() {
                         {item === "Home" ? <Home className="h-4 w-4" /> : <span className="h-4 w-4" />}
                         {item}
                       </button>
-                    ))}
+                      ))}
                     <div className="my-2 border-t" />
                     <button
                       type="button"
@@ -1545,6 +1691,183 @@ export function RepairIntakePage() {
             </section>
           ) : null}
 
+          {step === "employees" && canManageEmployees ? (
+            <section className="space-y-5">
+              <form className="rounded-lg border bg-card p-5 shadow-soft" onSubmit={submitManagedEmployee}>
+                <div className="mb-5">
+                  <h2 className="text-lg font-semibold">{editingEmployeeId ? "Edit employee" : "Create employee"}</h2>
+                  <p className="text-sm text-muted-foreground">
+                    Manage access, employment details, salary, and hourly rates. Deactivation preserves repair history.
+                  </p>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <FormField label="Employee code" htmlFor="employeeCode">
+                    <Input
+                      id="employeeCode"
+                      required
+                      value={employeeDraft.employeeCode}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, employeeCode: event.target.value }))}
+                    />
+                  </FormField>
+                  {isSystemAdministrator ? (
+                    <FormField label="Company" htmlFor="employeeCompany">
+                      <Select
+                        id="employeeCompany"
+                        value={employeeDraft.companyCode}
+                        onChange={(event) => setEmployeeDraft((current) => ({ ...current, companyCode: event.target.value }))}
+                      >
+                        <option value="KRISHNA">Krishna</option>
+                        <option value="GOKUL">Gokul</option>
+                      </Select>
+                    </FormField>
+                  ) : null}
+                  <FormField label="First name" htmlFor="employeeFirstName">
+                    <Input
+                      id="employeeFirstName"
+                      required
+                      value={employeeDraft.firstName}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, firstName: event.target.value }))}
+                    />
+                  </FormField>
+                  <FormField label="Last name" htmlFor="employeeLastName">
+                    <Input
+                      id="employeeLastName"
+                      value={employeeDraft.lastName}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, lastName: event.target.value }))}
+                    />
+                  </FormField>
+                  <FormField label="Mobile" htmlFor="employeeMobile">
+                    <Input
+                      id="employeeMobile"
+                      type="tel"
+                      value={employeeDraft.mobile}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, mobile: event.target.value }))}
+                    />
+                  </FormField>
+                  <FormField label="Email" htmlFor="employeeEmail">
+                    <Input
+                      id="employeeEmail"
+                      type="email"
+                      value={employeeDraft.email}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, email: event.target.value }))}
+                    />
+                  </FormField>
+                  <FormField label="Designation" htmlFor="employeeDesignation">
+                    <Input
+                      id="employeeDesignation"
+                      value={employeeDraft.designation}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, designation: event.target.value }))}
+                    />
+                  </FormField>
+                  <FormField label="Joining date" htmlFor="employeeJoiningDate">
+                    <Input
+                      id="employeeJoiningDate"
+                      type="date"
+                      value={employeeDraft.joiningDate}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, joiningDate: event.target.value }))}
+                    />
+                  </FormField>
+                  <FormField label="Monthly salary" htmlFor="employeeSalary">
+                    <Input
+                      id="employeeSalary"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={employeeDraft.salary}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, salary: Number(event.target.value) }))}
+                    />
+                  </FormField>
+                  <FormField label="Hourly rate" htmlFor="employeeHourlyRate">
+                    <Input
+                      id="employeeHourlyRate"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={employeeDraft.hourlyRate}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, hourlyRate: Number(event.target.value) }))}
+                    />
+                  </FormField>
+                  <FormField label="Status" htmlFor="employeeStatus">
+                    <Select
+                      id="employeeStatus"
+                      value={employeeDraft.status}
+                      onChange={(event) => setEmployeeDraft((current) => ({ ...current, status: event.target.value }))}
+                    >
+                      <option value="ACTIVE">Active</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </Select>
+                  </FormField>
+                </div>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <Button type="submit" isLoading={isSavingEmployee}>
+                    {editingEmployeeId ? "Save employee" : "Create employee"}
+                  </Button>
+                  {editingEmployeeId ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setEditingEmployeeId(null);
+                        setEmployeeDraft({
+                          ...emptyEmployeeDraft,
+                          companyCode: isSystemAdministrator ? "KRISHNA" : session?.user.company?.id ?? "",
+                        });
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
+                </div>
+              </form>
+
+              <section className="rounded-lg border bg-card p-5 shadow-soft">
+                <h2 className="text-lg font-semibold">Employees</h2>
+                <div className="mt-4 space-y-3">
+                  {managedEmployees.length === 0 ? (
+                    <p className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                      No employees found.
+                    </p>
+                  ) : (
+                    managedEmployees.map((employee) => (
+                      <div key={employee.employeeId} className="rounded-md border p-4">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <p className="font-semibold">
+                              {employee.firstName} {employee.lastName ?? ""}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {employee.employeeCode} · {employee.companyName}
+                              {employee.designation ? ` · ${employee.designation}` : ""}
+                            </p>
+                            <p className="mt-2 text-sm">
+                              Salary: {currency.format(employee.salary ?? 0)} · Hourly: {currency.format(employee.hourlyRate ?? 0)}
+                            </p>
+                          </div>
+                          <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{employee.status}</span>
+                        </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          <Button type="button" variant="outline" onClick={() => editManagedEmployee(employee)}>
+                            Edit
+                          </Button>
+                          {employee.status === "ACTIVE" ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              disabled={isSavingEmployee}
+                              onClick={() => void deactivateEmployee(employee)}
+                            >
+                              Deactivate
+                            </Button>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+            </section>
+          ) : null}
+
           {step === "billing" ? (
             <section className="rounded-lg border bg-card p-5 shadow-soft">
               <div className="mb-5">
@@ -1690,6 +2013,7 @@ export function RepairIntakePage() {
           ) : null}
         </section>
 
+        {step !== "employees" ? (
         <aside className="no-print h-fit rounded-lg border bg-card p-5 shadow-soft xl:sticky xl:top-6">
           <h2 className="text-base font-semibold">Bill summary</h2>
           <div className="mt-4 space-y-3 text-sm">
@@ -1713,6 +2037,7 @@ export function RepairIntakePage() {
             </div>
           </div>
         </aside>
+        ) : null}
       </div>
     </main>
   );
