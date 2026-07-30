@@ -578,7 +578,6 @@ function BillPrintLayout({
         </div>
         <div className="leading-tight">
           <h2 className="text-[15px] font-black uppercase tracking-wide text-[#05245f]">{companyName}</h2>
-          <p className="mt-1 text-[10px] font-bold">Electricals Repair & Service Center</p>
           <p className="mt-2 text-[10px]">{companyAddress}</p>
           <p className="mt-1 text-[10px]">{companyContact}</p>
           <p className="mt-2 text-[10px]">GSTIN : 27ABCDE1234F1Z1</p>
