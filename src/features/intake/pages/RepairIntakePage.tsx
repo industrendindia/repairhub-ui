@@ -201,7 +201,7 @@ const steps: Array<{ key: IntakeStep; label: string }> = [
 const workflowSteps = steps.filter((entry) => entry.key !== "billingHistory");
 const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory", "repairMaintenance"];
 
-const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Repair History", "Billing History", "Customers"];
+const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing History"];
 const billingHistoryPageSize = 10;
 const maxImageSizeBytes = 1024 * 1024;
 
