@@ -495,6 +495,12 @@ async function createCompany(company: { companyCode: string; name: string; gstNu
   await httpClient.post("/companies", company);
 }
 
+async function uploadCompanyLogo(companyCode: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  await httpClient.post(`/company-logos/company/${encodeURIComponent(companyCode)}`, formData);
+}
+
 async function getWorkItems() {
   const response = await httpClient.get<Array<{
     workItemId: number;
@@ -782,6 +788,7 @@ export function RepairIntakePage() {
   const [managedEmployees, setManagedEmployees] = useState<ManagedEmployee[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState("");
   const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", gstNumber: "", mobile: "", email: "", address: "" });
+  const [companyLogo, setCompanyLogo] = useState<File | null>(null);
   const [employeeDraft, setEmployeeDraft] = useState<EmployeeDraft>(emptyEmployeeDraft);
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
   const [isSavingEmployee, setIsSavingEmployee] = useState(false);
@@ -976,8 +983,10 @@ export function RepairIntakePage() {
     setIsSavingEmployee(true);
     try {
       await createCompany(companyDraft);
+      if (companyLogo) await uploadCompanyLogo(companyDraft.companyCode.toUpperCase(), companyLogo);
       setEmployeeDraft((current) => ({ ...current, companyCode: companyDraft.companyCode.toUpperCase() }));
       setCompanyDraft({ companyCode: "", name: "", gstNumber: "", mobile: "", email: "", address: "" });
+      setCompanyLogo(null);
       window.alert("Company created. You can now create its owner below.");
     } catch (error) {
       console.error("Unable to create company.", error);
@@ -1779,6 +1788,14 @@ export function RepairIntakePage() {
                     <FormField label="Address" htmlFor="newCompanyAddress">
                       <Input id="newCompanyAddress" value={companyDraft.address} onChange={(event) => setCompanyDraft((current) => ({ ...current, address: event.target.value }))} />
                     </FormField>
+                    <div className="md:col-span-2">
+                      <FileUpload
+                        label="Upload company logo"
+                        accept="image/png,image/jpeg,image/gif"
+                        maxFileSizeBytes={maxImageSizeBytes}
+                        onFilesChange={(files) => setCompanyLogo(files[0] ?? null)}
+                      />
+                    </div>
                   </div>
                   <Button className="mt-5" type="submit" isLoading={isSavingEmployee}>Create company</Button>
                 </form>
