@@ -1639,6 +1639,7 @@ export function RepairIntakePage() {
                       min="1"
                       step="1"
                       value={draftItem.quantity}
+                      onFocus={(event) => event.currentTarget.select()}
                       onChange={(event) => setDraftItem((current) => ({ ...current, quantity: Number(event.target.value) }))}
                     />
                   </FormField>
@@ -1649,6 +1650,7 @@ export function RepairIntakePage() {
                       min="0"
                       step="0.01"
                       value={draftItem.actualPrice}
+                      onFocus={(event) => event.currentTarget.select()}
                       onChange={(event) => setDraftItem((current) => ({ ...current, actualPrice: Number(event.target.value) }))}
                     />
                   </FormField>
@@ -1861,6 +1863,7 @@ export function RepairIntakePage() {
                         min="0"
                         step="0.01"
                         value={workItemDraft.defaultPrice}
+                        onFocus={(event) => event.currentTarget.select()}
                         onChange={(event) => setWorkItemDraft((current) => ({ ...current, defaultPrice: Number(event.target.value) }))}
                       />
                     </FormField>
@@ -1871,6 +1874,7 @@ export function RepairIntakePage() {
                         min="0"
                         step="1"
                         value={workItemDraft.warrantyDays}
+                        onFocus={(event) => event.currentTarget.select()}
                         onChange={(event) => setWorkItemDraft((current) => ({ ...current, warrantyDays: Number(event.target.value) }))}
                       />
                     </FormField>
@@ -2158,6 +2162,7 @@ export function RepairIntakePage() {
                       min="0"
                       step="0.01"
                       value={employeeDraft.salary}
+                      onFocus={(event) => event.currentTarget.select()}
                       onChange={(event) => setEmployeeDraft((current) => ({ ...current, salary: Number(event.target.value) }))}
                     />
                   </FormField>
@@ -2168,6 +2173,7 @@ export function RepairIntakePage() {
                       min="0"
                       step="0.01"
                       value={employeeDraft.hourlyRate}
+                      onFocus={(event) => event.currentTarget.select()}
                       onChange={(event) => setEmployeeDraft((current) => ({ ...current, hourlyRate: Number(event.target.value) }))}
                     />
                   </FormField>
@@ -2306,6 +2312,7 @@ export function RepairIntakePage() {
                           min="0"
                           step="0.01"
                           value={item.actualPrice}
+                          onFocus={(event) => event.currentTarget.select()}
                           onChange={(event) =>
                             setItems((current) =>
                               current.map((entry) =>
@@ -2375,6 +2382,7 @@ export function RepairIntakePage() {
                     max={remainingAmountDue}
                     step="0.01"
                     value={payment.amount}
+                    onFocus={(event) => event.currentTarget.select()}
                     onChange={(event) => setPayment((current) => ({ ...current, amount: Number(event.target.value) }))}
                   />
                 </FormField>
