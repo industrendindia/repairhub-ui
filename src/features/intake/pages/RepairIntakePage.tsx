@@ -31,6 +31,14 @@ type WorkItemOption = {
   warrantyDays: number;
 };
 
+type WorkItemDraft = {
+  itemName: string;
+  category: string;
+  description: string;
+  defaultPrice: number;
+  warrantyDays: number;
+};
+
 type ItemPhoto = {
   name: string;
   url: string;
@@ -522,6 +530,24 @@ async function getWorkItems() {
   }));
 }
 
+async function createWorkItem(payload: WorkItemDraft) {
+  const response = await httpClient.post<{
+    workItemId: number;
+    itemName: string;
+    category: string;
+    description: string | null;
+    rate: number;
+  }>("/work-items", payload);
+  return {
+    workItemId: String(response.data.workItemId),
+    itemName: response.data.itemName,
+    category: response.data.category,
+    description: response.data.description ?? "",
+    defaultPrice: Number(response.data.rate),
+    warrantyDays: payload.warrantyDays,
+  } satisfies WorkItemOption;
+}
+
 async function getJobCard(repairItemId: number) {
   const response = await httpClient.get<JobCard>(`/repair-maintenance/repair-items/${repairItemId}/job-card`);
   return response.data;
@@ -794,6 +820,14 @@ export function RepairIntakePage() {
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
   const [isSavingEmployee, setIsSavingEmployee] = useState(false);
   const [workItemOptions, setWorkItemOptions] = useState<WorkItemOption[]>([]);
+  const [workItemDraft, setWorkItemDraft] = useState<WorkItemDraft>({
+    itemName: "",
+    category: "DOMESTIC",
+    description: "",
+    defaultPrice: 0,
+    warrantyDays: 0,
+  });
+  const [isSavingWorkItem, setIsSavingWorkItem] = useState(false);
   const [selectedRepairItem, setSelectedRepairItem] = useState<MaintenanceRepairItem | null>(null);
   const [selectedJobCard, setSelectedJobCard] = useState<JobCard | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
@@ -943,15 +977,36 @@ export function RepairIntakePage() {
     goTo("repairMaintenance");
     setIsLoadingMaintenance(true);
     try {
-      const [availableEmployees, recentBills] = await Promise.all([getEmployees(), searchMaintenanceBills("")]);
+      const [availableEmployees, recentBills, configuredItems] = await Promise.all([
+        getEmployees(),
+        searchMaintenanceBills(""),
+        getWorkItems(),
+      ]);
       setEmployees(availableEmployees);
       setMaintenanceBills(recentBills);
+      setWorkItemOptions(configuredItems);
     } catch (error) {
       console.error("Unable to load repair maintenance.", error);
       setMaintenanceBills([]);
       window.alert("Unable to load repair maintenance. Please check the service and try again.");
     } finally {
       setIsLoadingMaintenance(false);
+    }
+  };
+
+  const submitWorkItem = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!workItemDraft.itemName.trim() || isSavingWorkItem) return;
+    setIsSavingWorkItem(true);
+    try {
+      const createdItem = await createWorkItem({ ...workItemDraft, itemName: workItemDraft.itemName.trim() });
+      setWorkItemOptions((current) => [...current, createdItem].sort((left, right) => left.itemName.localeCompare(right.itemName)));
+      setWorkItemDraft({ itemName: "", category: "DOMESTIC", description: "", defaultPrice: 0, warrantyDays: 0 });
+    } catch (error) {
+      console.error("Unable to create repair item.", error);
+      window.alert("Unable to add repair item. The name may already exist for this shop.");
+    } finally {
+      setIsSavingWorkItem(false);
     }
   };
 
@@ -1415,7 +1470,6 @@ export function RepairIntakePage() {
             <form className="rounded-lg border bg-card p-5 shadow-soft" onSubmit={handleCustomerSubmit}>
               <div className="mb-5">
                 <h2 className="text-lg font-semibold">Customer details</h2>
-                <p className="text-sm text-muted-foreground">Maps to the customers table before creating the repair record.</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <FormField label="Customer name *" htmlFor="customerName">
@@ -1481,7 +1535,6 @@ export function RepairIntakePage() {
               <div className="rounded-lg border bg-card p-5 shadow-soft">
                 <div className="mb-5">
                   <h2 className="text-lg font-semibold">Repair items</h2>
-                  <p className="text-sm text-muted-foreground">Add every item the customer brought, including pricing and photos.</p>
                 </div>
                 <div className="grid gap-4 lg:grid-cols-2">
                   <FormField label="Repair item *" htmlFor="workItemId" error={itemErrors.itemName}>
@@ -1712,7 +1765,77 @@ export function RepairIntakePage() {
           ) : null}
 
           {step === "repairMaintenance" ? (
-            <section className="rounded-lg border bg-card p-5 shadow-soft">
+            <section className="space-y-5">
+              {canManageEmployees ? (
+                <div className="rounded-lg border bg-card p-5 shadow-soft">
+                  <div className="mb-5">
+                    <h2 className="text-lg font-semibold">Repair item configuration</h2>
+                    <p className="text-sm text-muted-foreground">Add repair items available to this company when creating a bill.</p>
+                  </div>
+                  <form className="grid gap-4 md:grid-cols-2" onSubmit={submitWorkItem}>
+                    <FormField label="Item name *" htmlFor="configuredItemName">
+                      <Input
+                        id="configuredItemName"
+                        required
+                        value={workItemDraft.itemName}
+                        onChange={(event) => setWorkItemDraft((current) => ({ ...current, itemName: event.target.value }))}
+                      />
+                    </FormField>
+                    <FormField label="Category *" htmlFor="configuredItemCategory">
+                      <Select
+                        id="configuredItemCategory"
+                        required
+                        value={workItemDraft.category}
+                        onChange={(event) => setWorkItemDraft((current) => ({ ...current, category: event.target.value }))}
+                      >
+                        <option value="DOMESTIC">Domestic</option>
+                        <option value="INDUSTRIAL">Industrial</option>
+                      </Select>
+                    </FormField>
+                    <FormField label="Default price" htmlFor="configuredItemPrice">
+                      <Input
+                        id="configuredItemPrice"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={workItemDraft.defaultPrice}
+                        onChange={(event) => setWorkItemDraft((current) => ({ ...current, defaultPrice: Number(event.target.value) }))}
+                      />
+                    </FormField>
+                    <FormField label="Warranty days" htmlFor="configuredItemWarranty">
+                      <Input
+                        id="configuredItemWarranty"
+                        type="number"
+                        min="0"
+                        step="1"
+                        value={workItemDraft.warrantyDays}
+                        onChange={(event) => setWorkItemDraft((current) => ({ ...current, warrantyDays: Number(event.target.value) }))}
+                      />
+                    </FormField>
+                    <FormField className="md:col-span-2" label="Description" htmlFor="configuredItemDescription">
+                      <Textarea
+                        id="configuredItemDescription"
+                        value={workItemDraft.description}
+                        onChange={(event) => setWorkItemDraft((current) => ({ ...current, description: event.target.value }))}
+                      />
+                    </FormField>
+                    <div className="flex justify-end md:col-span-2">
+                      <Button type="submit" isLoading={isSavingWorkItem} leftIcon={<Plus className="h-4 w-4" />}>
+                        Add repair item
+                      </Button>
+                    </div>
+                  </form>
+                  <div className="mt-5 flex flex-wrap gap-2">
+                    {workItemOptions.map((item) => (
+                      <span key={item.workItemId} className="rounded-md bg-muted px-3 py-1.5 text-sm">
+                        {item.itemName} · {item.category === "INDUSTRIAL" ? "Industrial" : "Domestic"} · {currency.format(item.defaultPrice)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="rounded-lg border bg-card p-5 shadow-soft">
               <div className="mb-5">
                 <h2 className="text-lg font-semibold">Repair Maintenance</h2>
                 <p className="text-sm text-muted-foreground">Recent company repairs are shown below. Search by bill, repair ID, mobile, or customer.</p>
@@ -1857,6 +1980,7 @@ export function RepairIntakePage() {
                     <p className="mt-4 text-sm text-muted-foreground">Select a repair item to view or assign its job card.</p>
                   )}
                 </aside>
+              </div>
               </div>
             </section>
           ) : null}
