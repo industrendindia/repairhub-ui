@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/hooks/useAuth";
 import { httpClient } from "@/lib/api/httpClient";
+import type { ApiError } from "@/lib/api/api.types";
 import { storage } from "@/lib/storage/storage";
 import { Button } from "@/shared/components/ui/Button";
 import { FileUpload } from "@/shared/components/ui/FileUpload";
@@ -829,6 +830,7 @@ export function RepairIntakePage() {
     warrantyDays: 0,
   });
   const [isSavingWorkItem, setIsSavingWorkItem] = useState(false);
+  const [workItemFormError, setWorkItemFormError] = useState("");
   const [selectedRepairItem, setSelectedRepairItem] = useState<MaintenanceRepairItem | null>(null);
   const [selectedJobCard, setSelectedJobCard] = useState<JobCard | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
@@ -1021,6 +1023,7 @@ export function RepairIntakePage() {
   const submitWorkItem = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!workItemDraft.itemName.trim() || isSavingWorkItem) return;
+    setWorkItemFormError("");
     setIsSavingWorkItem(true);
     try {
       const createdItem = await createWorkItem({ ...workItemDraft, itemName: workItemDraft.itemName.trim() });
@@ -1028,7 +1031,12 @@ export function RepairIntakePage() {
       setWorkItemDraft({ itemName: "", category: "DOMESTIC", description: "", defaultPrice: 0, warrantyDays: 0 });
     } catch (error) {
       console.error("Unable to create repair item.", error);
-      window.alert("Unable to add repair item. The name may already exist for this shop.");
+      const apiError = error as ApiError;
+      setWorkItemFormError(
+        apiError.code === "WORK_ITEM_EXISTS"
+          ? "This repair item already exists."
+          : apiError.message || "Unable to add repair item. Please try again."
+      );
     } finally {
       setIsSavingWorkItem(false);
     }
@@ -1823,12 +1831,16 @@ export function RepairIntakePage() {
                     <p className="text-sm text-muted-foreground">Add repair items available to this company when creating a bill.</p>
                   </div>
                   <form className="grid gap-4 md:grid-cols-2" onSubmit={submitWorkItem}>
-                    <FormField label="Item name *" htmlFor="configuredItemName">
+                    <FormField label="Item name *" htmlFor="configuredItemName" error={workItemFormError}>
                       <Input
                         id="configuredItemName"
                         required
+                        error={workItemFormError}
                         value={workItemDraft.itemName}
-                        onChange={(event) => setWorkItemDraft((current) => ({ ...current, itemName: event.target.value }))}
+                        onChange={(event) => {
+                          setWorkItemDraft((current) => ({ ...current, itemName: event.target.value }));
+                          setWorkItemFormError("");
+                        }}
                       />
                     </FormField>
                     <FormField label="Category *" htmlFor="configuredItemCategory">
