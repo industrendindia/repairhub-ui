@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Camera, CheckCircle2, Home, LogOut, Menu, Plus, Printer, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Camera, CheckCircle2, ChevronDown, ChevronUp, Home, LogOut, Menu, Plus, Printer, Trash2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -831,6 +831,7 @@ export function RepairIntakePage() {
   });
   const [isSavingWorkItem, setIsSavingWorkItem] = useState(false);
   const [workItemFormError, setWorkItemFormError] = useState("");
+  const [isWorkItemConfigurationOpen, setIsWorkItemConfigurationOpen] = useState(false);
   const [selectedRepairItem, setSelectedRepairItem] = useState<MaintenanceRepairItem | null>(null);
   const [selectedJobCard, setSelectedJobCard] = useState<JobCard | null>(null);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
@@ -1828,11 +1829,23 @@ export function RepairIntakePage() {
             <section className="space-y-5">
               {canManageEmployees ? (
                 <div className="rounded-lg border bg-card p-5 shadow-soft">
-                  <div className="mb-5">
-                    <h2 className="text-lg font-semibold">Repair item configuration</h2>
-                    <p className="text-sm text-muted-foreground">Add repair items available to this company when creating a bill.</p>
-                  </div>
-                  <form className="grid gap-4 md:grid-cols-2" onSubmit={submitWorkItem}>
+                  <button
+                    type="button"
+                    className={`flex w-full items-center justify-between gap-4 text-left ${isWorkItemConfigurationOpen ? "mb-5" : ""}`}
+                    aria-expanded={isWorkItemConfigurationOpen}
+                    aria-controls="repair-item-configuration-form"
+                    onClick={() => setIsWorkItemConfigurationOpen((current) => !current)}
+                  >
+                    <span>
+                      <span className="block text-lg font-semibold">Repair item configuration</span>
+                      <span className="block text-sm text-muted-foreground">Add repair items available to this company when creating a bill.</span>
+                    </span>
+                    {isWorkItemConfigurationOpen
+                      ? <ChevronUp className="h-5 w-5 shrink-0" />
+                      : <ChevronDown className="h-5 w-5 shrink-0" />}
+                  </button>
+                  {isWorkItemConfigurationOpen ? (
+                  <form id="repair-item-configuration-form" className="grid gap-4 md:grid-cols-2" onSubmit={submitWorkItem}>
                     <FormField label="Item name *" htmlFor="configuredItemName" error={workItemFormError}>
                       <Input
                         id="configuredItemName"
@@ -1891,6 +1904,7 @@ export function RepairIntakePage() {
                       </Button>
                     </div>
                   </form>
+                  ) : null}
                 </div>
               ) : null}
 
