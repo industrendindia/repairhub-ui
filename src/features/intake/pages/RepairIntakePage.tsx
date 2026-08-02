@@ -802,6 +802,7 @@ export function RepairIntakePage() {
   const [step, setStep] = useState<IntakeStep>(() => savedDraft.step);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigationMenuRef = useRef<HTMLDivElement | null>(null);
+  const workItemDropdownRef = useRef<HTMLDivElement | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isSavingBill, setIsSavingBill] = useState(false);
   const [isSearchingBills, setIsSearchingBills] = useState(false);
@@ -839,6 +840,8 @@ export function RepairIntakePage() {
   const [repairMeta, setRepairMeta] = useState<RepairMeta>(() => savedDraft.repairMeta);
   const [items, setItems] = useState<RepairItem[]>(() => savedDraft.items);
   const [draftItem, setDraftItem] = useState<RepairItem>(() => savedDraft.draftItem);
+  const [workItemSearch, setWorkItemSearch] = useState(() => savedDraft.draftItem.itemName);
+  const [isWorkItemDropdownOpen, setIsWorkItemDropdownOpen] = useState(false);
   const [itemErrors, setItemErrors] = useState({ itemName: "", category: "" });
   const [billing, setBilling] = useState<BillingDetails>(() => savedDraft.billing);
   const [payment, setPayment] = useState<PaymentDetails>(() => savedDraft.payment);
@@ -881,6 +884,11 @@ export function RepairIntakePage() {
     (maintenancePage - 1) * billingHistoryPageSize,
     maintenancePage * billingHistoryPageSize
   );
+  const filteredWorkItemOptions = useMemo(() => {
+    const query = workItemSearch.trim().toLowerCase();
+    if (!query) return workItemOptions;
+    return workItemOptions.filter((item) => item.itemName.toLowerCase().includes(query));
+  }, [workItemOptions, workItemSearch]);
 
   useEffect(() => {
     if (!isMenuOpen) return;
@@ -901,6 +909,21 @@ export function RepairIntakePage() {
       document.removeEventListener("keydown", dismissOnEscape);
     };
   }, [isMenuOpen]);
+
+  useEffect(() => {
+    if (!isWorkItemDropdownOpen) return;
+    const closeWorkItemDropdown = (event: MouseEvent | TouchEvent) => {
+      if (!workItemDropdownRef.current?.contains(event.target as Node)) {
+        setIsWorkItemDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", closeWorkItemDropdown);
+    document.addEventListener("touchstart", closeWorkItemDropdown);
+    return () => {
+      document.removeEventListener("mousedown", closeWorkItemDropdown);
+      document.removeEventListener("touchstart", closeWorkItemDropdown);
+    };
+  }, [isWorkItemDropdownOpen]);
 
   useEffect(() => {
     storage.set<IntakeDraft>(draftStorageKey, {
@@ -936,6 +959,7 @@ export function RepairIntakePage() {
     setRepairMeta(defaultRepairMeta);
     setItems([]);
     setDraftItem(emptyDraftItem());
+    setWorkItemSearch("");
     setBilling(defaultBilling);
     setPayment(defaultPayment);
     setPersistedBill(null);
@@ -1253,7 +1277,7 @@ export function RepairIntakePage() {
 
   const addItem = () => {
     const errors = {
-      itemName: draftItem.itemName.trim() ? "" : "Please select a repair item.",
+      itemName: draftItem.workItemId ? "" : "Please select a repair item from the list.",
       category: draftItem.category ? "" : "Please select a category.",
     };
     setItemErrors(errors);
@@ -1273,6 +1297,7 @@ export function RepairIntakePage() {
       },
     ]);
     setDraftItem(emptyDraftItem());
+    setWorkItemSearch("");
     setItemErrors({ itemName: "", category: "" });
   };
 
@@ -1292,6 +1317,8 @@ export function RepairIntakePage() {
       actualPrice: selected?.defaultPrice ?? 0,
       warrantyDays: selected?.warrantyDays ?? 0,
     }));
+    setWorkItemSearch(selected?.itemName ?? "");
+    setIsWorkItemDropdownOpen(false);
   };
 
   const continueFromItems = () => {
@@ -1538,24 +1565,47 @@ export function RepairIntakePage() {
                 </div>
                 <div className="grid gap-4 lg:grid-cols-2">
                   <FormField label="Repair item *" htmlFor="workItemId" error={itemErrors.itemName}>
-                    <Select
-                      id="workItemId"
-                      required
-                      aria-invalid={Boolean(itemErrors.itemName)}
-                      className={itemErrors.itemName ? "border-destructive" : undefined}
-                      value={draftItem.workItemId}
-                      onChange={(event) => {
-                        selectWorkItem(event.target.value);
-                        setItemErrors((current) => ({ ...current, itemName: "" }));
-                      }}
-                    >
-                      <option value="">{workItemOptions.length ? "Select item" : "No repair items configured for this shop"}</option>
-                      {workItemOptions.map((item) => (
-                        <option key={item.workItemId} value={item.workItemId}>
-                          {item.itemName} - {currency.format(item.defaultPrice)}
-                        </option>
-                      ))}
-                    </Select>
+                    <div ref={workItemDropdownRef} className="relative">
+                      <Input
+                        id="workItemId"
+                        autoComplete="off"
+                        aria-expanded={isWorkItemDropdownOpen}
+                        aria-haspopup="listbox"
+                        aria-invalid={Boolean(itemErrors.itemName)}
+                        error={itemErrors.itemName}
+                        placeholder={workItemOptions.length ? "Type to search repair items" : "No repair items configured for this shop"}
+                        value={workItemSearch}
+                        onFocus={() => setIsWorkItemDropdownOpen(true)}
+                        onChange={(event) => {
+                          setWorkItemSearch(event.target.value);
+                          setDraftItem((current) => ({ ...current, workItemId: "", itemName: "" }));
+                          setItemErrors((current) => ({ ...current, itemName: "" }));
+                          setIsWorkItemDropdownOpen(true);
+                        }}
+                      />
+                      {isWorkItemDropdownOpen ? (
+                        <div className="absolute z-40 mt-1 max-h-64 w-full overflow-y-auto rounded-md border bg-card p-1 shadow-soft" role="listbox">
+                          {filteredWorkItemOptions.length ? (
+                            filteredWorkItemOptions.map((item) => (
+                              <button
+                                key={item.workItemId}
+                                type="button"
+                                className="flex w-full items-center justify-between gap-3 rounded px-3 py-2 text-left text-sm hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                onClick={() => {
+                                  selectWorkItem(item.workItemId);
+                                  setItemErrors((current) => ({ ...current, itemName: "" }));
+                                }}
+                              >
+                                <span>{item.itemName}</span>
+                                <span className="shrink-0 text-muted-foreground">{currency.format(item.defaultPrice)}</span>
+                              </button>
+                            ))
+                          ) : (
+                            <p className="px-3 py-3 text-sm text-muted-foreground">No matching repair item.</p>
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
                   </FormField>
                   <FormField label="Category *" htmlFor="itemCategory" error={itemErrors.category}>
                     <Select
