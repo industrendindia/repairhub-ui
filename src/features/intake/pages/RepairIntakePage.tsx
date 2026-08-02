@@ -1875,13 +1875,6 @@ export function RepairIntakePage() {
                       </Button>
                     </div>
                   </form>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {workItemOptions.map((item) => (
-                      <span key={item.workItemId} className="rounded-md bg-muted px-3 py-1.5 text-sm">
-                        {item.itemName} · {item.category === "INDUSTRIAL" ? "Industrial" : "Domestic"} · {currency.format(item.defaultPrice)}
-                      </span>
-                    ))}
-                  </div>
                 </div>
               ) : null}
 
