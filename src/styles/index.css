@@ -82,10 +82,11 @@
   body,
   #root {
     width: 210mm;
-    height: 297mm;
+    height: 146mm;
     margin: 0;
     padding: 0;
     background: #ffffff;
+    overflow: hidden;
   }
 
   body * {
@@ -107,7 +108,7 @@
     position: fixed;
     inset: 0 auto auto 0;
     width: 210mm;
-    height: auto;
+    height: 146mm;
     margin: 0;
     padding: 0;
   }
@@ -117,7 +118,7 @@
     left: 4mm;
     top: 0;
     width: 206mm;
-    height: auto;
+    height: 146mm;
     max-height: 146mm;
     margin: 0;
     box-shadow: none;

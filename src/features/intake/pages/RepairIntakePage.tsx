@@ -16,6 +16,7 @@ type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "bill
 type CustomerDetails = {
   customerName: string;
   mobile: string;
+  alternateMobile: string;
   email: string;
   address: string;
   notes: string;
@@ -80,6 +81,7 @@ type BillSearchResult = {
   repairNumber: string;
   customerName: string;
   mobile: string;
+  alternateMobile: string | null;
   grandTotal: number;
   amountPaid: number;
   balance: number;
@@ -260,6 +262,7 @@ const emptyEmployeeDraft: EmployeeDraft = {
 const defaultCustomer: CustomerDetails = {
   customerName: "",
   mobile: "",
+  alternateMobile: "",
   email: "",
   address: "",
   notes: "",
@@ -536,7 +539,6 @@ type BillPrintLayoutProps = {
   gstNumber?: string | null;
   logoUrl?: string | null;
   billNumber: string;
-  repairNumber: string;
   customer: CustomerDetails;
   items: RepairItem[];
   subtotal: number;
@@ -552,7 +554,6 @@ function BillPrintLayout({
   gstNumber,
   logoUrl,
   billNumber,
-  repairNumber,
   customer,
   items,
   subtotal,
@@ -597,12 +598,13 @@ function BillPrintLayout({
           )}
         </div>
         <div className="leading-tight">
-          <h2 className="text-[15px] font-black uppercase tracking-wide text-[#05245f]">{companyName}</h2>
-          <p className="mt-2 text-[10px]">{companyAddress}</p>
-          <p className="mt-1 text-[10px]">{companyContact}</p>
-          {gstNumber?.trim() ? <p className="mt-2 text-[10px]">GSTIN : {gstNumber}</p> : null}
+          <h2 className="text-[18px] font-black uppercase tracking-wide text-[#05245f]">{companyName}</h2>
+          <p className="mt-2 text-[11px]">{companyAddress}</p>
+          <p className="mt-1 text-[11px]">{companyContact}</p>
+          <p className="mt-1 text-[11px]">https://krushnaelecticalandelectronics.com</p>
+          {gstNumber?.trim() ? <p className="mt-2 text-[11px]">GSTIN : {gstNumber}</p> : null}
         </div>
-        <div className="text-[11px] font-bold">
+        <div className="text-[12px] font-bold">
           <div className="mb-2 rounded bg-[#05245f] py-1 text-center text-[14px] font-black uppercase text-white">
             Invoice
           </div>
@@ -610,9 +612,6 @@ function BillPrintLayout({
             <span>Invoice No.</span>
             <span>:</span>
             <span className="text-red-700">{billNumber}</span>
-            <span>Repair No.</span>
-            <span>:</span>
-            <span className="text-red-700">{repairNumber}</span>
             <span>Bill Date</span>
             <span>:</span>
             <span>{formatDateTime()}</span>
@@ -620,7 +619,7 @@ function BillPrintLayout({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-6 border-b border-[#0b2a66] py-2 text-[11px] font-bold">
+      <div className="grid grid-cols-2 gap-6 border-b border-[#0b2a66] py-2 text-[12px] font-bold">
         <div className="grid grid-cols-[18mm_3mm_1fr] gap-y-1">
           <span>Customer</span>
           <span>:</span>
@@ -636,7 +635,7 @@ function BillPrintLayout({
         </div>
       </div>
 
-      <table className="mt-1 w-full table-fixed border-collapse text-[10px]">
+      <table className="mt-1 w-full table-fixed border-collapse text-[11px]">
         <thead>
           <tr className="bg-[#05245f] text-white">
             <th className="w-[10mm] border border-slate-400 py-1">Sr.</th>
@@ -668,7 +667,7 @@ function BillPrintLayout({
                       <img src={item.photos[0].url} alt={item.photos[0].name} className="h-full w-full object-cover" />
                     </button>
                   ) : (
-                    <div className="mx-auto flex h-10 w-16 items-center justify-center rounded border bg-slate-100 text-[8px] text-slate-500">
+                    <div className="mx-auto flex h-10 w-16 items-center justify-center rounded border bg-slate-100 text-[9px] text-slate-500">
                       No photo
                     </div>
                   )}
@@ -681,7 +680,7 @@ function BillPrintLayout({
         </tbody>
       </table>
 
-      <div className="mt-1 grid grid-cols-2 gap-1 text-[10px]">
+      <div className="mt-1 grid grid-cols-2 gap-1 text-[11px]">
         <div className="rounded border border-slate-400 p-2">
           <div className="grid grid-cols-[1fr_5mm_22mm] gap-y-1">
             <span>Sub Total</span>
@@ -725,7 +724,7 @@ function BillPrintLayout({
 
       </div>
 
-      <div className="mt-1 grid grid-cols-[92mm_1fr] gap-2 text-[9px]">
+      <div className="mt-1 grid grid-cols-[92mm_1fr] gap-2 text-[10px]">
         <div className="grid grid-cols-2 rounded border border-slate-400">
           <div className="min-h-[18mm] border-r border-slate-400 p-1 text-center font-bold">
             Customer Signature
@@ -741,8 +740,8 @@ function BillPrintLayout({
             <div className="mx-auto mt-8 w-28 border-t border-slate-500" />
           </div>
         </div>
-        <div className="rounded border border-slate-400 p-1.5 text-[8px] leading-tight">
-          <p className="mb-0.5 text-center text-[8px] font-black uppercase text-[#05245f]">Terms & Conditions</p>
+        <div className="rounded border border-slate-400 p-1.5 text-[9px] leading-tight">
+          <p className="mb-0.5 text-center text-[9px] font-black uppercase text-[#05245f]">Terms & Conditions</p>
           <ul className="list-disc space-y-0.5 pl-3">
             <li>Advance of work has to be given.</li>
             <li>No guaranty on repaired appliances.</li>
@@ -805,6 +804,7 @@ export function RepairIntakePage() {
   const [repairMeta, setRepairMeta] = useState<RepairMeta>(() => savedDraft.repairMeta);
   const [items, setItems] = useState<RepairItem[]>(() => savedDraft.items);
   const [draftItem, setDraftItem] = useState<RepairItem>(() => savedDraft.draftItem);
+  const [itemErrors, setItemErrors] = useState({ itemName: "", category: "" });
   const [billing, setBilling] = useState<BillingDetails>(() => savedDraft.billing);
   const [payment, setPayment] = useState<PaymentDetails>(() => savedDraft.payment);
   const [persistedBill, setPersistedBill] = useState<PersistedBillDetails | null>(() => savedDraft.persistedBill);
@@ -1175,11 +1175,20 @@ export function RepairIntakePage() {
       window.alert("Mobile number must contain exactly 10 digits.");
       return;
     }
+    if (customer.alternateMobile && !/^\d{10}$/.test(customer.alternateMobile)) {
+      window.alert("Alternate mobile number must contain exactly 10 digits.");
+      return;
+    }
     goTo("items");
   };
 
   const addItem = () => {
-    if (!draftItem.itemName.trim() || !draftItem.category) return;
+    const errors = {
+      itemName: draftItem.itemName.trim() ? "" : "Please select a repair item.",
+      category: draftItem.category ? "" : "Please select a category.",
+    };
+    setItemErrors(errors);
+    if (errors.itemName || errors.category) return;
 
     setItems((current) => [
       ...current,
@@ -1195,6 +1204,7 @@ export function RepairIntakePage() {
       },
     ]);
     setDraftItem(emptyDraftItem());
+    setItemErrors({ itemName: "", category: "" });
   };
 
   const removeItem = (id: string) => {
@@ -1365,10 +1375,7 @@ export function RepairIntakePage() {
               </div>
               <div className="flex items-center gap-3">
                 {logoUrl ? <img src={logoUrl} alt={`${companyName} logo`} className="h-12 w-12 rounded-md object-contain" /> : null}
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">{companyName}</p>
-                  <h1 className="text-2xl font-semibold">New repair bill workflow</h1>
-                </div>
+                <h1 className="text-xl font-semibold text-foreground sm:text-2xl">{companyName}</h1>
               </div>
             </div>
             <div className="flex flex-wrap gap-2">
@@ -1397,7 +1404,7 @@ export function RepairIntakePage() {
                 <p className="text-sm text-muted-foreground">Maps to the customers table before creating the repair record.</p>
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <FormField label="Customer name" htmlFor="customerName">
+                <FormField label="Customer name *" htmlFor="customerName">
                   <Input
                     id="customerName"
                     required
@@ -1405,7 +1412,7 @@ export function RepairIntakePage() {
                     onChange={(event) => setCustomer((current) => ({ ...current, customerName: event.target.value }))}
                   />
                 </FormField>
-                <FormField label="Mobile" htmlFor="mobile">
+                <FormField label="Mobile *" htmlFor="mobile">
                   <Input
                     id="mobile"
                     type="tel"
@@ -1418,6 +1425,22 @@ export function RepairIntakePage() {
                       const mobile = event.target.value;
                       if (/^\d{0,10}$/.test(mobile)) {
                         setCustomer((current) => ({ ...current, mobile }));
+                      }
+                    }}
+                  />
+                </FormField>
+                <FormField label="Alternate mobile" htmlFor="alternateMobile" hint="Optional; bills can be searched using this number.">
+                  <Input
+                    id="alternateMobile"
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
+                    value={customer.alternateMobile}
+                    onChange={(event) => {
+                      const alternateMobile = event.target.value;
+                      if (/^\d{0,10}$/.test(alternateMobile)) {
+                        setCustomer((current) => ({ ...current, alternateMobile }));
                       }
                     }}
                   />
@@ -1447,8 +1470,18 @@ export function RepairIntakePage() {
                   <p className="text-sm text-muted-foreground">Add every item the customer brought, including pricing and photos.</p>
                 </div>
                 <div className="grid gap-4 lg:grid-cols-2">
-                  <FormField label="Repair item" htmlFor="workItemId">
-                    <Select id="workItemId" required value={draftItem.workItemId} onChange={(event) => selectWorkItem(event.target.value)}>
+                  <FormField label="Repair item *" htmlFor="workItemId" error={itemErrors.itemName}>
+                    <Select
+                      id="workItemId"
+                      required
+                      aria-invalid={Boolean(itemErrors.itemName)}
+                      className={itemErrors.itemName ? "border-destructive" : undefined}
+                      value={draftItem.workItemId}
+                      onChange={(event) => {
+                        selectWorkItem(event.target.value);
+                        setItemErrors((current) => ({ ...current, itemName: "" }));
+                      }}
+                    >
                       <option value="">{workItemOptions.length ? "Select item" : "No repair items configured for this shop"}</option>
                       {workItemOptions.map((item) => (
                         <option key={item.workItemId} value={item.workItemId}>
@@ -1457,12 +1490,17 @@ export function RepairIntakePage() {
                       ))}
                     </Select>
                   </FormField>
-                  <FormField label="Category" htmlFor="itemCategory">
+                  <FormField label="Category *" htmlFor="itemCategory" error={itemErrors.category}>
                     <Select
                       id="itemCategory"
                       required
+                      aria-invalid={Boolean(itemErrors.category)}
+                      className={itemErrors.category ? "border-destructive" : undefined}
                       value={draftItem.category}
-                      onChange={(event) => setDraftItem((current) => ({ ...current, category: event.target.value }))}
+                      onChange={(event) => {
+                        setDraftItem((current) => ({ ...current, category: event.target.value }));
+                        setItemErrors((current) => ({ ...current, category: "" }));
+                      }}
                     >
                       <option value="">Select category</option>
                       <option value="DOMESTIC">Domestic</option>
@@ -2163,7 +2201,6 @@ export function RepairIntakePage() {
                 gstNumber={gstNumber}
                 logoUrl={logoUrl}
                 billNumber={billNumber}
-                repairNumber={repairNumber}
                 customer={customer}
                 items={items}
                 subtotal={subtotal}
