@@ -784,6 +784,7 @@ export function RepairIntakePage() {
   const [billingHistoryPage, setBillingHistoryPage] = useState(1);
   const [maintenanceSearchQuery, setMaintenanceSearchQuery] = useState("");
   const [maintenanceBills, setMaintenanceBills] = useState<MaintenanceBill[]>([]);
+  const [maintenancePage, setMaintenancePage] = useState(1);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [managedEmployees, setManagedEmployees] = useState<ManagedEmployee[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState("");
@@ -840,6 +841,11 @@ export function RepairIntakePage() {
   const pagedBillSearchResults = billSearchResults.slice(
     (billingHistoryPage - 1) * billingHistoryPageSize,
     billingHistoryPage * billingHistoryPageSize
+  );
+  const maintenancePageCount = Math.max(Math.ceil(maintenanceBills.length / billingHistoryPageSize), 1);
+  const pagedMaintenanceBills = maintenanceBills.slice(
+    (maintenancePage - 1) * billingHistoryPageSize,
+    maintenancePage * billingHistoryPageSize
   );
 
   useEffect(() => {
@@ -930,12 +936,19 @@ export function RepairIntakePage() {
 
   const openRepairMaintenance = async () => {
     setIsMenuOpen(false);
+    setMaintenanceSearchQuery("");
+    setMaintenancePage(1);
+    setSelectedRepairItem(null);
+    setSelectedJobCard(null);
+    goTo("repairMaintenance");
     setIsLoadingMaintenance(true);
     try {
-      setEmployees(await getEmployees());
-      goTo("repairMaintenance");
+      const [availableEmployees, recentBills] = await Promise.all([getEmployees(), searchMaintenanceBills("")]);
+      setEmployees(availableEmployees);
+      setMaintenanceBills(recentBills);
     } catch (error) {
       console.error("Unable to load repair maintenance.", error);
+      setMaintenanceBills([]);
       window.alert("Unable to load repair maintenance. Please check the service and try again.");
     } finally {
       setIsLoadingMaintenance(false);
@@ -1058,9 +1071,10 @@ export function RepairIntakePage() {
   const handleMaintenanceSearch = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const query = maintenanceSearchQuery.trim();
-    if (!query || isLoadingMaintenance) return;
+    if (isLoadingMaintenance) return;
 
     setIsLoadingMaintenance(true);
+    setMaintenancePage(1);
     try {
       setMaintenanceBills(await searchMaintenanceBills(query));
       setSelectedRepairItem(null);
@@ -1094,7 +1108,7 @@ export function RepairIntakePage() {
       await assignRepairItem(selectedRepairItem.repairItemId, Number(selectedEmployeeId), assignmentRemarks);
       setAssignmentRemarks("");
       const [updatedBills, updatedJobCard] = await Promise.all([
-        maintenanceSearchQuery.trim() ? searchMaintenanceBills(maintenanceSearchQuery.trim()) : Promise.resolve(maintenanceBills),
+        searchMaintenanceBills(maintenanceSearchQuery.trim()),
         getJobCard(selectedRepairItem.repairItemId),
       ]);
       setMaintenanceBills(updatedBills);
@@ -1701,7 +1715,7 @@ export function RepairIntakePage() {
             <section className="rounded-lg border bg-card p-5 shadow-soft">
               <div className="mb-5">
                 <h2 className="text-lg font-semibold">Repair Maintenance</h2>
-                <p className="text-sm text-muted-foreground">Assign repair items to technicians and maintain job cards.</p>
+                <p className="text-sm text-muted-foreground">Recent company repairs are shown below. Search by bill, repair ID, mobile, or customer.</p>
               </div>
               <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleMaintenanceSearch}>
                 <Input
@@ -1717,12 +1731,16 @@ export function RepairIntakePage() {
 
               <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
                 <div className="space-y-4">
-                  {maintenanceBills.length === 0 ? (
+                  {isLoadingMaintenance && maintenanceBills.length === 0 ? (
                     <p className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                      Search a bill to assign repair work.
+                      Loading repair history...
+                    </p>
+                  ) : maintenanceBills.length === 0 ? (
+                    <p className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+                      No repair bills found for this company.
                     </p>
                   ) : (
-                    maintenanceBills.map((bill) => (
+                    pagedMaintenanceBills.map((bill) => (
                       <div key={bill.billId} className="rounded-md border p-4">
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
@@ -1756,6 +1774,29 @@ export function RepairIntakePage() {
                       </div>
                     ))
                   )}
+                  {maintenanceBills.length > billingHistoryPageSize ? (
+                    <div className="flex items-center justify-between gap-3 pt-1">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={maintenancePage === 1}
+                        onClick={() => setMaintenancePage((page) => Math.max(page - 1, 1))}
+                      >
+                        Previous
+                      </Button>
+                      <span className="text-sm text-muted-foreground">
+                        Page {maintenancePage} of {maintenancePageCount}
+                      </span>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={maintenancePage === maintenancePageCount}
+                        onClick={() => setMaintenancePage((page) => Math.min(page + 1, maintenancePageCount))}
+                      >
+                        Next
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
 
                 <aside className="h-fit rounded-md border p-4">
