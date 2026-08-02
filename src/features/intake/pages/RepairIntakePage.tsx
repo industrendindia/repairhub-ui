@@ -634,13 +634,13 @@ function BillPrintLayout({
           <div className="mb-2 rounded bg-[#05245f] py-1 text-center text-[14px] font-black uppercase text-white">
             Invoice
           </div>
-          <div className="grid grid-cols-[31mm_3mm_1fr] gap-y-1">
+          <div className="grid grid-cols-[25mm_2mm_1fr] gap-y-1">
             <span>Invoice No.</span>
             <span>:</span>
             <span className="text-red-700">{billNumber}</span>
             <span>Bill Date</span>
             <span>:</span>
-            <span>{formatDateTime()}</span>
+            <span className="whitespace-nowrap text-[11px]">{formatDateTime()}</span>
           </div>
         </div>
       </div>

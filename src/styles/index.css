@@ -117,8 +117,8 @@
     position: absolute;
     left: 4mm;
     top: 0;
-    width: 206mm;
-    height: 146mm;
+    width: 202mm;
+    height: auto;
     max-height: 146mm;
     margin: 0;
     box-shadow: none;
