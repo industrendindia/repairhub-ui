@@ -139,6 +139,16 @@ type ManagedEmployee = {
   role: string | null;
 };
 
+type CompanyDetails = {
+  companyCode: string;
+  name: string;
+  gstNumber: string | null;
+  mobile: string | null;
+  email: string | null;
+  address: string | null;
+  active: boolean;
+};
+
 type EmployeeDraft = {
   employeeCode: string;
   firstName: string;
@@ -507,6 +517,11 @@ async function createCompany(company: { companyCode: string; name: string; gstNu
   await httpClient.post("/companies", company);
 }
 
+async function searchCompanies(q: string) {
+  const response = await httpClient.get<CompanyDetails[]>("/companies", { params: { q } });
+  return response.data;
+}
+
 async function uploadCompanyLogo(companyCode: string, file: File) {
   const formData = new FormData();
   formData.append("file", file);
@@ -816,6 +831,10 @@ export function RepairIntakePage() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [managedEmployees, setManagedEmployees] = useState<ManagedEmployee[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState("");
+  const [companySearch, setCompanySearch] = useState("");
+  const [companySearchResults, setCompanySearchResults] = useState<CompanyDetails[]>([]);
+  const [isSearchingCompanies, setIsSearchingCompanies] = useState(false);
+  const [hasSearchedCompanies, setHasSearchedCompanies] = useState(false);
   const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", gstNumber: "", mobile: "", email: "", address: "" });
   const [companyLogo, setCompanyLogo] = useState<File | null>(null);
   const [employeeDraft, setEmployeeDraft] = useState<EmployeeDraft>(emptyEmployeeDraft);
@@ -1134,6 +1153,21 @@ export function RepairIntakePage() {
       window.alert("Unable to create company. Check that the company code is unique.");
     } finally {
       setIsSavingEmployee(false);
+    }
+  };
+
+  const handleCompanySearch = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSearchingCompanies(true);
+    setHasSearchedCompanies(true);
+    try {
+      setCompanySearchResults(await searchCompanies(companySearch.trim()));
+    } catch (error) {
+      console.error("Unable to search companies.", error);
+      setCompanySearchResults([]);
+      window.alert("Unable to search companies.");
+    } finally {
+      setIsSearchingCompanies(false);
     }
   };
 
@@ -2066,6 +2100,59 @@ export function RepairIntakePage() {
 
           {step === "employees" && canManageEmployees ? (
             <section className="space-y-5">
+              {isSystemAdministrator ? (
+                <div className="rounded-lg border bg-card p-5 shadow-soft">
+                  <div className="mb-5">
+                    <h2 className="text-lg font-semibold">Search companies</h2>
+                    <p className="text-sm text-muted-foreground">Review an existing company by code or name before onboarding a new one.</p>
+                  </div>
+                  <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleCompanySearch}>
+                    <Input
+                      aria-label="Search companies"
+                      placeholder="Company code or company name"
+                      value={companySearch}
+                      onChange={(event) => setCompanySearch(event.target.value)}
+                    />
+                    <Button type="submit" isLoading={isSearchingCompanies}>Search</Button>
+                  </form>
+                  {companySearchResults.length ? (
+                    <div className="mt-5 grid gap-3 md:grid-cols-2">
+                      {companySearchResults.map((company) => (
+                        <div key={company.companyCode} className="rounded-md border p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold">{company.name}</p>
+                              <p className="text-sm text-muted-foreground">Code: {company.companyCode}</p>
+                            </div>
+                            <span className={`rounded-full px-2 py-1 text-xs ${company.active ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"}`}>
+                              {company.active ? "Active" : "Inactive"}
+                            </span>
+                          </div>
+                          <div className="mt-3 space-y-1 text-sm">
+                            <p>GSTIN: {company.gstNumber || "Not provided"}</p>
+                            <p>Mobile: {company.mobile || "Not provided"}</p>
+                            <p>Email: {company.email || "Not provided"}</p>
+                            <p>Address: {company.address || "Not provided"}</p>
+                          </div>
+                          <Button
+                            className="mt-4"
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setEmployeeDraft((current) => ({ ...current, companyCode: company.companyCode }))}
+                          >
+                            Use for employee
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : hasSearchedCompanies && !isSearchingCompanies ? (
+                    <p className="mt-5 rounded-md border border-dashed px-4 py-6 text-center text-sm text-muted-foreground">
+                      No companies found.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
               {isSystemAdministrator ? (
                 <form className="rounded-lg border bg-card p-5 shadow-soft" onSubmit={submitCompany}>
                   <div className="mb-5">
