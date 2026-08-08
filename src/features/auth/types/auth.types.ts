@@ -7,6 +7,7 @@ export type AuthUser = {
     id: string;
     name: string;
     logoUrl: string | null;
+    invoiceHeaderText?: string | null;
     address?: string | null;
     mobile?: string | null;
     email?: string | null;

@@ -21,6 +21,7 @@ type CustomerDetails = {
   email: string;
   address: string;
   notes: string;
+  signature: ItemPhoto | null;
 };
 
 type WorkItemOption = {
@@ -142,6 +143,7 @@ type ManagedEmployee = {
 type CompanyDetails = {
   companyCode: string;
   name: string;
+  invoiceHeaderText: string | null;
   gstNumber: string | null;
   mobile: string | null;
   email: string | null;
@@ -260,6 +262,7 @@ const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingH
 const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing History"];
 const billingHistoryPageSize = 10;
 const maxImageSizeBytes = 1024 * 1024;
+const maxSignatureSizeBytes = 150 * 1024;
 
 const emptyEmployeeDraft: EmployeeDraft = {
   employeeCode: "",
@@ -285,6 +288,7 @@ const defaultCustomer: CustomerDetails = {
   email: "",
   address: "",
   notes: "",
+  signature: null,
 };
 
 const defaultRepairMeta: RepairMeta = {
@@ -513,7 +517,7 @@ async function deactivateManagedEmployee(employeeId: number) {
   return response.data;
 }
 
-async function createCompany(company: { companyCode: string; name: string; gstNumber: string; mobile: string; email: string; address: string }) {
+async function createCompany(company: { companyCode: string; name: string; invoiceHeaderText: string; gstNumber: string; mobile: string; email: string; address: string }) {
   await httpClient.post("/companies", company);
 }
 
@@ -576,6 +580,7 @@ async function assignRepairItem(repairItemId: number, employeeId: number, remark
 
 type BillPrintLayoutProps = {
   companyName: string;
+  invoiceHeaderText?: string | null;
   companyAddress: string;
   companyContact: string;
   gstNumber?: string | null;
@@ -591,6 +596,7 @@ type BillPrintLayoutProps = {
 
 function BillPrintLayout({
   companyName,
+  invoiceHeaderText,
   companyAddress,
   companyContact,
   gstNumber,
@@ -641,6 +647,11 @@ function BillPrintLayout({
         </div>
         <div className="leading-tight">
           <h2 className="text-[18px] font-black uppercase tracking-wide text-[#05245f]">{companyName}</h2>
+          {invoiceHeaderText?.trim() ? (
+            <p className="mt-1 whitespace-pre-line text-[10px] font-bold uppercase leading-tight text-blue-700">
+              {invoiceHeaderText}
+            </p>
+          ) : null}
           <p className="mt-2 text-[11px]">{companyAddress}</p>
           <p className="mt-1 text-[11px]">{companyContact}</p>
           <p className="mt-1 text-[11px]">https://krushnaelecticalandelectronics.com</p>
@@ -770,7 +781,10 @@ function BillPrintLayout({
         <div className="grid grid-cols-2 rounded border border-slate-400">
           <div className="min-h-[18mm] border-r border-slate-400 p-1 text-center font-bold">
             Customer Signature
-            <div className="mx-auto mt-8 w-28 border-t border-slate-500" />
+            {customer.signature?.url ? (
+              <img src={customer.signature.url} alt="Customer signature" className="mx-auto mt-1 h-[10mm] max-w-28 object-contain" />
+            ) : null}
+            <div className={`mx-auto w-28 border-t border-slate-500 ${customer.signature?.url ? "mt-0.5" : "mt-8"}`} />
           </div>
           <div className="relative min-h-[18mm] p-1 text-center font-bold">
             Owner Signature / Stamp
@@ -835,7 +849,7 @@ export function RepairIntakePage() {
   const [companySearchResults, setCompanySearchResults] = useState<CompanyDetails[]>([]);
   const [isSearchingCompanies, setIsSearchingCompanies] = useState(false);
   const [hasSearchedCompanies, setHasSearchedCompanies] = useState(false);
-  const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", gstNumber: "", mobile: "", email: "", address: "" });
+  const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "" });
   const [companyLogo, setCompanyLogo] = useState<File | null>(null);
   const [employeeDraft, setEmployeeDraft] = useState<EmployeeDraft>(emptyEmployeeDraft);
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
@@ -889,6 +903,7 @@ export function RepairIntakePage() {
   const billNumber = persistedBill?.billNumber ?? "BILL-DRAFT";
   const repairNumber = persistedBill?.repairNumber ?? "REP-DRAFT";
   const companyName = session?.user.company?.name ?? "RepairHub Service Center";
+  const invoiceHeaderText = session?.user.company?.invoiceHeaderText ?? null;
   const companyAddress = session?.user.company?.address ?? "";
   const companyContact = [
     session?.user.company?.mobile ? `Mob: ${session.user.company.mobile}` : "",
@@ -1145,7 +1160,7 @@ export function RepairIntakePage() {
       await createCompany(companyDraft);
       if (companyLogo) await uploadCompanyLogo(companyDraft.companyCode.toUpperCase(), companyLogo);
       setEmployeeDraft((current) => ({ ...current, companyCode: companyDraft.companyCode.toUpperCase() }));
-      setCompanyDraft({ companyCode: "", name: "", gstNumber: "", mobile: "", email: "", address: "" });
+      setCompanyDraft({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "" });
       setCompanyLogo(null);
       window.alert("Company created. You can now create its owner below.");
     } catch (error) {
@@ -1610,6 +1625,23 @@ export function RepairIntakePage() {
                     onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))}
                   />
                 </FormField>
+                <div className="md:col-span-2">
+                  <FileUpload
+                    label="Upload customer signature (optional)"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
+                    maxFileSizeBytes={maxSignatureSizeBytes}
+                    onFilesChange={(files) => {
+                      const file = files[0];
+                      if (!file) {
+                        setCustomer((current) => ({ ...current, signature: null }));
+                        return;
+                      }
+                      void fileToPhoto(file).then((signature) => {
+                        setCustomer((current) => ({ ...current, signature }));
+                      });
+                    }}
+                  />
+                </div>
               </div>
               <div className="mt-6 flex justify-end">
                 <Button type="submit" rightIcon={<ArrowRight className="h-4 w-4" />}>
@@ -2130,6 +2162,7 @@ export function RepairIntakePage() {
                           </div>
                           <div className="mt-3 space-y-1 text-sm">
                             <p>GSTIN: {company.gstNumber || "Not provided"}</p>
+                            <p>Invoice header: {company.invoiceHeaderText || "Not provided"}</p>
                             <p>Mobile: {company.mobile || "Not provided"}</p>
                             <p>Email: {company.email || "Not provided"}</p>
                             <p>Address: {company.address || "Not provided"}</p>
@@ -2166,6 +2199,11 @@ export function RepairIntakePage() {
                     <FormField label="Company name" htmlFor="newCompanyName">
                       <Input id="newCompanyName" required value={companyDraft.name} onChange={(event) => setCompanyDraft((current) => ({ ...current, name: event.target.value }))} />
                     </FormField>
+                    <div className="md:col-span-2">
+                      <FormField label="Invoice/Bill header text (optional)" htmlFor="newCompanyInvoiceHeader">
+                        <Input id="newCompanyInvoiceHeader" value={companyDraft.invoiceHeaderText} onChange={(event) => setCompanyDraft((current) => ({ ...current, invoiceHeaderText: event.target.value }))} />
+                      </FormField>
+                    </div>
                     <FormField label="GSTIN (optional)" htmlFor="newCompanyGst">
                       <Input id="newCompanyGst" value={companyDraft.gstNumber} onChange={(event) => setCompanyDraft((current) => ({ ...current, gstNumber: event.target.value }))} />
                     </FormField>
@@ -2531,6 +2569,7 @@ export function RepairIntakePage() {
               </div>
               <BillPrintLayout
                 companyName={companyName}
+                invoiceHeaderText={invoiceHeaderText}
                 companyAddress={companyAddress}
                 companyContact={companyContact}
                 gstNumber={gstNumber}

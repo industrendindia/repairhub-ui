@@ -33,8 +33,11 @@ export function FileUpload({
 
     if (oversizedFiles.length > 0) {
       const names = oversizedFiles.map((file) => file.name).join(", ");
+      const maximumSize = maxFileSizeBytes! < 1024 * 1024
+        ? `${Math.round(maxFileSizeBytes! / 1024)} KB`
+        : `${Math.round(maxFileSizeBytes! / (1024 * 1024))} MB`;
       setFiles([]);
-      setError(`${names}: each image must be 1 MB or smaller.`);
+      setError(`${names}: each file must be ${maximumSize} or smaller.`);
       event.target.value = "";
       onFilesChange?.([]);
       return;
@@ -63,7 +66,11 @@ export function FileUpload({
         <UploadCloud className="mb-2 h-6 w-6 text-muted-foreground" />
         <span className="text-sm font-medium">{label}</span>
         <span className="mt-1 text-xs text-muted-foreground">
-          Choose from your device{maxFileSizeBytes ? " · Maximum 1 MB per image" : ""}
+          Choose from your device{maxFileSizeBytes
+            ? ` · Maximum ${maxFileSizeBytes < 1024 * 1024
+              ? `${Math.round(maxFileSizeBytes / 1024)} KB`
+              : `${Math.round(maxFileSizeBytes / (1024 * 1024))} MB`} per file`
+            : ""}
         </span>
       </label>
       <input
