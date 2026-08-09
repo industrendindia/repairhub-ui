@@ -857,6 +857,7 @@ export function RepairIntakePage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigationMenuRef = useRef<HTMLDivElement | null>(null);
   const workItemDropdownRef = useRef<HTMLDivElement | null>(null);
+  const signatureInputRef = useRef<HTMLInputElement | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isSavingBill, setIsSavingBill] = useState(false);
   const [isSearchingBills, setIsSearchingBills] = useState(false);
@@ -1625,7 +1626,7 @@ export function RepairIntakePage() {
                     }}
                   />
                 </FormField>
-                <FormField label="Alternate mobile" htmlFor="alternateMobile" hint="Optional; bills can be searched using this number.">
+                <FormField label="Alternate mobile" htmlFor="alternateMobile">
                   <Input
                     id="alternateMobile"
                     type="tel"
@@ -1649,35 +1650,46 @@ export function RepairIntakePage() {
                     onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))}
                   />
                 </FormField>
-                <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
-                  <div className="rounded-lg border p-4">
-                    <div className="mb-3 flex items-center gap-2 font-semibold"><Upload className="h-4 w-4" /> Upload signature</div>
-                    <FileUpload
-                      label="Choose signature image (optional)"
-                      accept="image/png,image/jpeg,image/gif,image/webp"
-                      maxFileSizeBytes={maxSignatureSizeBytes}
-                      onFilesChange={(files) => {
-                        const file = files[0];
-                        if (!file) {
-                          setCustomer((current) => ({ ...current, signature: null }));
-                          return;
-                        }
-                        void fileToPhoto(file).then((signature) => setCustomer((current) => ({ ...current, signature })));
-                      }}
-                    />
-                  </div>
-                  <div className="flex flex-col rounded-lg border p-4">
-                    <div className="mb-2 flex items-center gap-2 font-semibold"><PenLine className="h-4 w-4" /> Sign on tablet</div>
-                    <p className="mb-4 text-sm text-muted-foreground">Open a full signature pad with a fixed ball-pen stroke.</p>
-                    <Button type="button" variant="outline" className="mt-auto" onClick={() => openSignaturePad((signature) => setCustomer((current) => ({ ...current, signature })))} leftIcon={<PenLine className="h-4 w-4" />}>
-                      Open signature pad
-                    </Button>
-                  </div>
+                <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+                  <input
+                    ref={signatureInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/gif,image/webp"
+                    className="sr-only"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      if (file.size > maxSignatureSizeBytes) {
+                        window.alert("Signature file must be 150 KB or smaller.");
+                        event.target.value = "";
+                        return;
+                      }
+                      void fileToPhoto(file).then((signature) => setCustomer((current) => ({ ...current, signature })));
+                    }}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    title="Upload signature file up to 150 KB"
+                    aria-label="Upload signature file up to 150 KB"
+                    onClick={() => signatureInputRef.current?.click()}
+                    leftIcon={<Upload className="h-4 w-4" />}
+                  >
+                    Upload signature
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    title="Sign using the tablet signature pad"
+                    onClick={() => openSignaturePad((signature) => setCustomer((current) => ({ ...current, signature })))}
+                    leftIcon={<PenLine className="h-4 w-4" />}
+                  >
+                    Sign on tablet
+                  </Button>
                   {customer.signature?.url ? (
-                    <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 p-3 md:col-span-2">
-                      <div><p className="text-sm font-medium">Customer signature ready</p><p className="text-xs text-muted-foreground">This image will be saved and printed on the bill and invoice.</p></div>
-                      <img src={customer.signature.url} alt="Customer signature preview" className="h-14 w-40 rounded border bg-white object-contain" />
-                      <Button type="button" variant="outline" onClick={() => setCustomer((current) => ({ ...current, signature: null }))}>Remove</Button>
+                    <div className="flex items-center gap-2 rounded-md border bg-muted/30 p-1.5">
+                      <img src={customer.signature.url} alt="Customer signature preview" className="h-8 w-24 bg-white object-contain" />
+                      <Button type="button" variant="ghost" size="sm" onClick={() => setCustomer((current) => ({ ...current, signature: null }))} aria-label="Remove customer signature"><X className="h-4 w-4" /></Button>
                     </div>
                   ) : null}
                 </div>
