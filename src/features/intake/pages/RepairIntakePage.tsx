@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Camera, CheckCircle2, ChevronDown, ChevronUp, Home, LogOut, Menu, Plus, Printer, Trash2, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Camera, CheckCircle2, ChevronDown, ChevronUp, Home, LogOut, Menu, PenLine, Plus, Printer, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -263,6 +263,30 @@ const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing
 const billingHistoryPageSize = 10;
 const maxImageSizeBytes = 1024 * 1024;
 const maxSignatureSizeBytes = 150 * 1024;
+
+function openSignaturePad(onConfirm: (signature: ItemPhoto) => void) {
+  const signatureWindow = window.open("", "repairhub-customer-signature", "popup=yes,width=980,height=720");
+  if (!signatureWindow) {
+    window.alert("Please allow pop-ups to open the customer signature pad.");
+    return;
+  }
+
+  const messageHandler = (event: MessageEvent) => {
+    if (event.source !== signatureWindow || event.data?.type !== "repairhub-signature") return;
+    const url = String(event.data.url ?? "");
+    if (!url.startsWith("data:image/png;base64,")) return;
+    onConfirm({ name: `customer-signature-${Date.now()}.png`, url });
+    window.removeEventListener("message", messageHandler);
+  };
+  window.addEventListener("message", messageHandler);
+
+  signatureWindow.document.write(`<!doctype html>
+<html><head><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Customer Signature</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#f8fafc;color:#0f172a;font-family:system-ui,sans-serif}.page{min-height:100vh;display:flex;flex-direction:column;padding:24px}.head h1{margin:0;font-size:24px}.head p{margin:6px 0 18px;color:#64748b}.pad{flex:1;min-height:390px;border:2px solid #94a3b8;border-radius:12px;background:#fff;overflow:hidden;touch-action:none}canvas{display:block;width:100%;height:100%;touch-action:none}.actions{display:flex;justify-content:flex-end;gap:12px;margin-top:18px}button{min-width:120px;padding:13px 20px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;font-size:16px;font-weight:700}button.ok{border-color:#05245f;background:#05245f;color:#fff}button:disabled{opacity:.45}</style></head>
+<body><main class="page"><div class="head"><h1>Customer signature</h1><p>Sign inside the box using the tablet pen or your finger. The stroke is fixed to ball-pen size.</p></div><div class="pad"><canvas id="pad"></canvas></div><div class="actions"><button id="clear" type="button">Clear</button><button id="ok" class="ok" type="button" disabled>OK</button></div></main>
+<script>(()=>{const c=document.getElementById('pad'),box=c.parentElement,ctx=c.getContext('2d'),ok=document.getElementById('ok');let drawing=false,signed=false,last=null;function size(){const r=box.getBoundingClientRect(),d=Math.min(window.devicePixelRatio||1,2),old=signed?c.toDataURL():null;c.width=Math.round(r.width*d);c.height=Math.round(r.height*d);ctx.setTransform(d,0,0,d,0,0);ctx.lineWidth=2;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='#0f172a';if(old){const i=new Image();i.onload=()=>ctx.drawImage(i,0,0,r.width,r.height);i.src=old}}function point(e){const r=c.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}c.addEventListener('pointerdown',e=>{drawing=true;last=point(e);c.setPointerCapture(e.pointerId)});c.addEventListener('pointermove',e=>{if(!drawing)return;const p=point(e);ctx.beginPath();ctx.moveTo(last.x,last.y);ctx.lineTo(p.x,p.y);ctx.stroke();last=p;signed=true;ok.disabled=false});c.addEventListener('pointerup',()=>drawing=false);c.addEventListener('pointercancel',()=>drawing=false);document.getElementById('clear').onclick=()=>{ctx.clearRect(0,0,c.width,c.height);signed=false;ok.disabled=true};ok.onclick=()=>{if(!signed)return;window.opener.postMessage({type:'repairhub-signature',url:c.toDataURL('image/png')},window.location.origin);window.close()};window.addEventListener('resize',size);size()})()<\/script></body></html>`);
+  signatureWindow.document.close();
+}
 
 const emptyEmployeeDraft: EmployeeDraft = {
   employeeCode: "",
@@ -1625,22 +1649,37 @@ export function RepairIntakePage() {
                     onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))}
                   />
                 </FormField>
-                <div className="md:col-span-2">
-                  <FileUpload
-                    label="Upload customer signature (optional)"
-                    accept="image/png,image/jpeg,image/gif,image/webp"
-                    maxFileSizeBytes={maxSignatureSizeBytes}
-                    onFilesChange={(files) => {
-                      const file = files[0];
-                      if (!file) {
-                        setCustomer((current) => ({ ...current, signature: null }));
-                        return;
-                      }
-                      void fileToPhoto(file).then((signature) => {
-                        setCustomer((current) => ({ ...current, signature }));
-                      });
-                    }}
-                  />
+                <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
+                  <div className="rounded-lg border p-4">
+                    <div className="mb-3 flex items-center gap-2 font-semibold"><Upload className="h-4 w-4" /> Upload signature</div>
+                    <FileUpload
+                      label="Choose signature image (optional)"
+                      accept="image/png,image/jpeg,image/gif,image/webp"
+                      maxFileSizeBytes={maxSignatureSizeBytes}
+                      onFilesChange={(files) => {
+                        const file = files[0];
+                        if (!file) {
+                          setCustomer((current) => ({ ...current, signature: null }));
+                          return;
+                        }
+                        void fileToPhoto(file).then((signature) => setCustomer((current) => ({ ...current, signature })));
+                      }}
+                    />
+                  </div>
+                  <div className="flex flex-col rounded-lg border p-4">
+                    <div className="mb-2 flex items-center gap-2 font-semibold"><PenLine className="h-4 w-4" /> Sign on tablet</div>
+                    <p className="mb-4 text-sm text-muted-foreground">Open a full signature pad with a fixed ball-pen stroke.</p>
+                    <Button type="button" variant="outline" className="mt-auto" onClick={() => openSignaturePad((signature) => setCustomer((current) => ({ ...current, signature })))} leftIcon={<PenLine className="h-4 w-4" />}>
+                      Open signature pad
+                    </Button>
+                  </div>
+                  {customer.signature?.url ? (
+                    <div className="flex items-center justify-between gap-4 rounded-lg border bg-muted/30 p-3 md:col-span-2">
+                      <div><p className="text-sm font-medium">Customer signature ready</p><p className="text-xs text-muted-foreground">This image will be saved and printed on the bill and invoice.</p></div>
+                      <img src={customer.signature.url} alt="Customer signature preview" className="h-14 w-40 rounded border bg-white object-contain" />
+                      <Button type="button" variant="outline" onClick={() => setCustomer((current) => ({ ...current, signature: null }))}>Remove</Button>
+                    </div>
+                  ) : null}
                 </div>
               </div>
               <div className="mt-6 flex justify-end">
