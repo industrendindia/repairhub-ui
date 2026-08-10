@@ -325,7 +325,7 @@ const defaultDraftItem: RepairItem = {
   id: "",
   workItemId: "",
   itemName: "",
-  category: "",
+  category: "DOMESTIC",
   serialNo: "",
   description: "",
   quantity: 1,
@@ -438,7 +438,12 @@ function readIntakeDraft(key: string): IntakeDraft {
     items: Array.isArray(savedDraft?.items)
       ? savedDraft.items.map((item) => ({ ...item, photos: item.photos ?? [] }))
       : [],
-    draftItem: { ...emptyDraftItem(), ...savedDraft?.draftItem, photos: savedDraft?.draftItem?.photos ?? [] },
+    draftItem: {
+      ...emptyDraftItem(),
+      ...savedDraft?.draftItem,
+      category: savedDraft?.draftItem?.category || "DOMESTIC",
+      photos: savedDraft?.draftItem?.photos ?? [],
+    },
     billing: { ...defaultBilling, ...savedDraft?.billing },
     payment: { ...defaultPayment, ...savedDraft?.payment },
     persistedBill: savedDraft?.persistedBill ?? null,
