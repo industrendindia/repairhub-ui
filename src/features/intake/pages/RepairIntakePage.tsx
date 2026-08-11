@@ -677,8 +677,10 @@ function BillPrintLayout({
         <div className="leading-tight">
           <h2 className="text-[18px] font-black uppercase tracking-wide text-[#05245f]">{companyName}</h2>
           {invoiceHeaderText?.trim() ? (
-            <p className="mt-1 whitespace-pre-line text-[10px] font-bold uppercase leading-tight text-blue-700">
-              {invoiceHeaderText}
+            <p className="mt-1 text-[9px] font-bold leading-tight tracking-tight text-blue-700">
+              {invoiceHeaderText.split(/\r?\n/).map((line, index) => (
+                <span key={`${index}-${line}`} className="block whitespace-nowrap">{line}</span>
+              ))}
             </p>
           ) : null}
           <p className="mt-2 text-[11px]">{companyAddress}</p>
