@@ -101,6 +101,7 @@ type BillSearchResult = {
 };
 
 type BillDetail = PersistedBillDetails & {
+  printedOn: string;
   customer: CustomerDetails;
   repairMeta: RepairMeta;
   items: Array<Omit<RepairItem, "id" | "photos"> & { photos?: ItemPhoto[] }>;
@@ -615,6 +616,7 @@ type BillPrintLayoutProps = {
   gstNumber?: string | null;
   logoUrl?: string | null;
   billNumber: string;
+  printedOn?: string;
   customer: CustomerDetails;
   items: RepairItem[];
   subtotal: number;
@@ -631,6 +633,7 @@ function BillPrintLayout({
   gstNumber,
   logoUrl,
   billNumber,
+  printedOn,
   customer,
   items,
   subtotal,
@@ -698,7 +701,7 @@ function BillPrintLayout({
             <span className="text-red-700">{billNumber}</span>
             <span>Bill Date</span>
             <span>:</span>
-            <span className="whitespace-nowrap text-[11px]">{formatDateTime()}</span>
+            <span className="whitespace-nowrap text-[11px]">{formatDateTime(printedOn)}</span>
           </div>
         </div>
       </div>
@@ -2633,6 +2636,7 @@ export function RepairIntakePage() {
                 gstNumber={gstNumber}
                 logoUrl={logoUrl}
                 billNumber={billNumber}
+                printedOn={loadedBill?.printedOn}
                 customer={customer}
                 items={items}
                 subtotal={subtotal}
