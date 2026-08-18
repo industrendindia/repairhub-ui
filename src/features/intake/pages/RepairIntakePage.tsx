@@ -96,12 +96,14 @@ type BillSearchResult = {
   amountPaid: number;
   balance: number;
   paymentStatus: string;
+  repairStatus: string;
   photoId: string | null;
   photoUrl: string | null;
 };
 
 type BillDetail = PersistedBillDetails & {
   printedOn: string;
+  repairStatus: string;
   customer: CustomerDetails;
   repairMeta: RepairMeta;
   items: Array<Omit<RepairItem, "id" | "photos"> & { photos?: ItemPhoto[] }>;
@@ -187,6 +189,7 @@ type MaintenanceBill = {
   grandTotal: number;
   balance: number;
   paymentStatus: string;
+  repairStatus: string;
   items: MaintenanceRepairItem[];
 };
 
@@ -499,6 +502,11 @@ async function getBillDetail(billId: number) {
 
 async function addBillPayment(billId: number, payment: PaymentDetails) {
   const response = await httpClient.post<{ amountPaid: number; balance: number; paymentStatus: string }>(`/bills/${billId}/payments`, payment);
+  return response.data;
+}
+
+async function deliverBill(billId: number) {
+  const response = await httpClient.post<{ repairStatus: string; deliveredOn: string }>(`/bills/${billId}/deliver`);
   return response.data;
 }
 
@@ -871,6 +879,7 @@ export function RepairIntakePage() {
   const [isPrinting, setIsPrinting] = useState(false);
   const [isSavingBill, setIsSavingBill] = useState(false);
   const [isSearchingBills, setIsSearchingBills] = useState(false);
+  const [deliveringBillId, setDeliveringBillId] = useState<number | null>(null);
   const [billSearchQuery, setBillSearchQuery] = useState("");
   const [billSearchResults, setBillSearchResults] = useState<BillSearchResult[]>([]);
   const [billingHistoryPage, setBillingHistoryPage] = useState(1);
@@ -1328,6 +1337,26 @@ export function RepairIntakePage() {
       window.alert("Unable to search billing history. Please check the service and try again.");
     } finally {
       setIsSearchingBills(false);
+    }
+  };
+
+  const markBillDelivered = async (bill: BillSearchResult) => {
+    if (bill.repairStatus === "COMPLETED") return;
+    if (!window.confirm(`Mark all repair items on ${bill.billNumber} as delivered? This will complete the repair and stop further assignments.`)) {
+      return;
+    }
+
+    setDeliveringBillId(bill.billId);
+    try {
+      const delivered = await deliverBill(bill.billId);
+      setBillSearchResults((current) => current.map((entry) =>
+        entry.billId === bill.billId ? { ...entry, repairStatus: delivered.repairStatus } : entry
+      ));
+    } catch (error) {
+      console.error("Unable to mark bill as delivered.", error);
+      window.alert("Unable to mark the repair as delivered. Please try again.");
+    } finally {
+      setDeliveringBillId(null);
     }
   };
 
@@ -1965,9 +1994,23 @@ export function RepairIntakePage() {
                           {currency.format(Number(bill.balance))}
                         </p>
                       </div>
-                      <Button type="button" variant="outline" onClick={() => void openPreviousBill(bill.billId)}>
-                        Open bill
-                      </Button>
+                      <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
+                        <span className="rounded-md bg-muted px-2 py-1 text-center text-xs text-muted-foreground">
+                          {bill.repairStatus === "COMPLETED" ? "Completed" : "Under repair"}
+                        </span>
+                        <Button type="button" variant="outline" onClick={() => void openPreviousBill(bill.billId)}>
+                          Open bill
+                        </Button>
+                        {bill.repairStatus !== "COMPLETED" ? (
+                          <Button
+                            type="button"
+                            onClick={() => void markBillDelivered(bill)}
+                            isLoading={deliveringBillId === bill.billId}
+                          >
+                            Mark delivered
+                          </Button>
+                        ) : null}
+                      </div>
                     </div>
                   ))
                 )}
@@ -2078,7 +2121,12 @@ export function RepairIntakePage() {
                               {bill.repairNumber} · {bill.customerName} {bill.mobile ? `- ${bill.mobile}` : ""}
                             </p>
                           </div>
-                          <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{bill.paymentStatus}</span>
+                          <div className="flex gap-2">
+                            <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{bill.paymentStatus}</span>
+                            <span className="rounded-md bg-secondary px-2 py-1 text-xs text-secondary-foreground">
+                              {bill.repairStatus === "COMPLETED" ? "Completed" : "Under repair"}
+                            </span>
+                          </div>
                         </div>
                         <div className="mt-4 space-y-3">
                           {bill.items.map((item) => (
@@ -2136,6 +2184,11 @@ export function RepairIntakePage() {
                         <p className="font-medium">{selectedRepairItem.itemName}</p>
                         <p className="text-sm text-muted-foreground">{selectedRepairItem.serialNo || selectedRepairItem.description || "Repair item"}</p>
                       </div>
+                      {selectedJobCard?.header.status === "DELIVERED" ? (
+                        <p className="rounded-md border bg-muted px-3 py-3 text-sm text-muted-foreground">
+                          This repair was delivered and is now read-only. Technician assignment is closed.
+                        </p>
+                      ) : (
                       <div className="grid gap-3">
                         <FormField label="Assign / hand off to" htmlFor="assignEmployee">
                           <Select id="assignEmployee" value={selectedEmployeeId} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
@@ -2158,6 +2211,7 @@ export function RepairIntakePage() {
                           Save assignment
                         </Button>
                       </div>
+                      )}
 
                       {selectedJobCard ? (
                         <div className="space-y-4 text-sm">
