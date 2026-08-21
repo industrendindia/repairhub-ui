@@ -97,6 +97,7 @@ type BillSearchResult = {
   balance: number;
   paymentStatus: string;
   repairStatus: string;
+  deliveredDate: string | null;
   photoId: string | null;
   photoUrl: string | null;
 };
@@ -104,6 +105,7 @@ type BillSearchResult = {
 type BillDetail = PersistedBillDetails & {
   printedOn: string;
   repairStatus: string;
+  deliveredDate: string | null;
   customer: CustomerDetails;
   repairMeta: RepairMeta;
   items: Array<Omit<RepairItem, "id" | "photos"> & { photos?: ItemPhoto[] }>;
@@ -1350,7 +1352,9 @@ export function RepairIntakePage() {
     try {
       const delivered = await deliverBill(bill.billId);
       setBillSearchResults((current) => current.map((entry) =>
-        entry.billId === bill.billId ? { ...entry, repairStatus: delivered.repairStatus } : entry
+        entry.billId === bill.billId
+          ? { ...entry, repairStatus: delivered.repairStatus, deliveredDate: delivered.deliveredOn }
+          : entry
       ));
     } catch (error) {
       console.error("Unable to mark bill as delivered.", error);
@@ -1995,9 +1999,12 @@ export function RepairIntakePage() {
                         </p>
                       </div>
                       <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
-                        <span className="rounded-md bg-muted px-2 py-1 text-center text-xs text-muted-foreground">
-                          {bill.repairStatus === "COMPLETED" ? "Completed" : "Under repair"}
-                        </span>
+                        <div className="rounded-md bg-muted px-2 py-1 text-center text-xs text-muted-foreground">
+                          <p>{bill.repairStatus === "COMPLETED" ? "Completed" : "Under repair"}</p>
+                          {bill.repairStatus === "COMPLETED" && bill.deliveredDate ? (
+                            <p className="mt-0.5 font-medium">Delivered: {formatDate(bill.deliveredDate)}</p>
+                          ) : null}
+                        </div>
                         <Button type="button" variant="outline" onClick={() => void openPreviousBill(bill.billId)}>
                           Open bill
                         </Button>
