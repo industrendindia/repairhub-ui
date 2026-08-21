@@ -97,6 +97,7 @@ type BillSearchResult = {
   balance: number;
   paymentStatus: string;
   repairStatus: string;
+  printedOn: string;
   deliveredDate: string | null;
   photoId: string | null;
   photoUrl: string | null;
@@ -2003,6 +2004,8 @@ export function RepairIntakePage() {
                           <p>{bill.repairStatus === "COMPLETED" ? "Completed" : "Under repair"}</p>
                           {bill.repairStatus === "COMPLETED" && bill.deliveredDate ? (
                             <p className="mt-0.5 font-medium">Delivered: {formatDate(bill.deliveredDate)}</p>
+                          ) : bill.printedOn ? (
+                            <p className="mt-0.5 font-medium">Created: {formatDate(bill.printedOn)}</p>
                           ) : null}
                         </div>
                         <Button type="button" variant="outline" onClick={() => void openPreviousBill(bill.billId)}>
