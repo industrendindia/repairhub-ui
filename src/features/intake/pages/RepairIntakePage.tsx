@@ -2648,7 +2648,7 @@ export function RepairIntakePage() {
                     id="paymentAmount"
                     required
                     type="number"
-                    min={loadedBill ? "0" : "0.01"}
+                    min="0"
                     max={remainingAmountDue}
                     step="0.01"
                     value={payment.amount}
