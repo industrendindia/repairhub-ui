@@ -509,8 +509,13 @@ async function addBillPayment(billId: number, payment: PaymentDetails) {
   return response.data;
 }
 
-async function deliverBill(billId: number) {
-  const response = await httpClient.post<{ repairStatus: string; deliveredOn: string }>(`/bills/${billId}/deliver`);
+async function requestDeliveryOtp(billId: number) {
+  const response = await httpClient.post<{ maskedMobile: string; expiresAt: string; messageSent: boolean }>(`/bills/${billId}/delivery-otp`);
+  return response.data;
+}
+
+async function deliverBill(billId: number, otp: string) {
+  const response = await httpClient.post<{ repairStatus: string; deliveredOn: string }>(`/bills/${billId}/deliver`, { otp });
   return response.data;
 }
 
@@ -885,6 +890,11 @@ export function RepairIntakePage() {
   const [isSavingBill, setIsSavingBill] = useState(false);
   const [isSearchingBills, setIsSearchingBills] = useState(false);
   const [deliveringBillId, setDeliveringBillId] = useState<number | null>(null);
+  const [deliveryOtpBill, setDeliveryOtpBill] = useState<BillSearchResult | null>(null);
+  const [deliveryOtp, setDeliveryOtp] = useState("");
+  const [deliveryOtpNotice, setDeliveryOtpNotice] = useState("");
+  const [deliveryOtpError, setDeliveryOtpError] = useState("");
+  const [isRequestingDeliveryOtp, setIsRequestingDeliveryOtp] = useState(false);
   const [billSearchQuery, setBillSearchQuery] = useState("");
   const [billSearchResults, setBillSearchResults] = useState<BillSearchResult[]>([]);
   const [billingHistoryPage, setBillingHistoryPage] = useState(1);
@@ -1345,23 +1355,53 @@ export function RepairIntakePage() {
     }
   };
 
-  const markBillDelivered = async (bill: BillSearchResult) => {
-    if (bill.repairStatus === "COMPLETED") return;
-    if (!window.confirm(`Mark all repair items on ${bill.billNumber} as delivered? This will complete the repair and stop further assignments.`)) {
-      return;
-    }
-
-    setDeliveringBillId(bill.billId);
+  const sendDeliveryOtp = async (bill: BillSearchResult) => {
+    if (isRequestingDeliveryOtp) return;
+    setIsRequestingDeliveryOtp(true);
+    setDeliveryOtpError("");
+    setDeliveryOtpNotice("Sending a 6-digit OTP to the customer...");
     try {
-      const delivered = await deliverBill(bill.billId);
+      const result = await requestDeliveryOtp(bill.billId);
+      setDeliveryOtpNotice(result.messageSent
+        ? `OTP sent to ${result.maskedMobile}. It is valid for 10 minutes.`
+        : "The OTP message could not be sent. You can retry or use the shop fallback OTP.");
+    } catch (error) {
+      console.error("Unable to request delivery OTP.", error);
+      setDeliveryOtpNotice("");
+      setDeliveryOtpError("Unable to create the OTP. Please retry before marking delivered.");
+    } finally {
+      setIsRequestingDeliveryOtp(false);
+    }
+  };
+
+  const openDeliveryOtp = (bill: BillSearchResult) => {
+    if (bill.repairStatus === "COMPLETED") return;
+    setDeliveryOtpBill(bill);
+    setDeliveryOtp("");
+    setDeliveryOtpError("");
+    setDeliveryOtpNotice("");
+    void sendDeliveryOtp(bill);
+  };
+
+  const markBillDelivered = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const bill = deliveryOtpBill;
+    if (!bill || deliveryOtp.length !== 6 || deliveringBillId !== null || isRequestingDeliveryOtp) return;
+    setDeliveringBillId(bill.billId);
+    setDeliveryOtpError("");
+    try {
+      const delivered = await deliverBill(bill.billId, deliveryOtp);
       setBillSearchResults((current) => current.map((entry) =>
         entry.billId === bill.billId
           ? { ...entry, repairStatus: delivered.repairStatus, deliveredDate: delivered.deliveredOn }
           : entry
       ));
+      setDeliveryOtpBill(null);
+      setDeliveryOtp("");
     } catch (error) {
       console.error("Unable to mark bill as delivered.", error);
-      window.alert("Unable to mark the repair as delivered. Please try again.");
+      const apiError = error as ApiError;
+      setDeliveryOtpError(apiError.message || "The OTP is incorrect or expired. Please retry.");
     } finally {
       setDeliveringBillId(null);
     }
@@ -2023,8 +2063,8 @@ export function RepairIntakePage() {
                         {bill.repairStatus !== "COMPLETED" ? (
                           <Button
                             type="button"
-                            onClick={() => void markBillDelivered(bill)}
-                            isLoading={deliveringBillId === bill.billId}
+                            onClick={() => openDeliveryOtp(bill)}
+                            isLoading={isRequestingDeliveryOtp && deliveryOtpBill?.billId === bill.billId}
                           >
                             Mark delivered
                           </Button>
@@ -2756,6 +2796,73 @@ export function RepairIntakePage() {
         </aside>
         ) : null}
       </div>
+      {deliveryOtpBill ? (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation">
+          <div
+            className="w-full max-w-md rounded-lg border bg-card p-5 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delivery-otp-title"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="delivery-otp-title" className="text-lg font-semibold">Confirm delivery</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Enter the customer OTP to mark {deliveryOtpBill.billNumber} as delivered.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Close delivery OTP popup"
+                onClick={() => setDeliveryOtpBill(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <form className="mt-5 space-y-4" onSubmit={markBillDelivered}>
+              <FormField label="6-digit OTP" htmlFor="deliveryOtp" error={deliveryOtpError}>
+                <Input
+                  id="deliveryOtp"
+                  autoFocus
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  pattern="[0-9]{6}"
+                  maxLength={6}
+                  placeholder="Enter OTP"
+                  value={deliveryOtp}
+                  error={deliveryOtpError}
+                  onChange={(event) => {
+                    setDeliveryOtp(event.target.value.replace(/\D/g, "").slice(0, 6));
+                    setDeliveryOtpError("");
+                  }}
+                />
+              </FormField>
+              {deliveryOtpNotice ? <p className="text-sm text-muted-foreground">{deliveryOtpNotice}</p> : null}
+              <p className="text-xs text-muted-foreground">If the customer cannot receive the message, the shop fallback OTP is 987600.</p>
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <Button type="button" variant="outline" onClick={() => setDeliveryOtpBill(null)}>Cancel</Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  isLoading={isRequestingDeliveryOtp}
+                  onClick={() => void sendDeliveryOtp(deliveryOtpBill)}
+                >
+                  Resend OTP
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={deliveryOtp.length !== 6 || isRequestingDeliveryOtp}
+                  isLoading={deliveringBillId === deliveryOtpBill.billId}
+                >
+                  Verify and mark delivered
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }
