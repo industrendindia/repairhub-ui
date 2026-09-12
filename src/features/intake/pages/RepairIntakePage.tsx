@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Camera, CheckCircle2, ChevronDown, ChevronUp, Home, LogOut, Menu, PenLine, Plus, Printer, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Camera, CheckCircle2, ChevronDown, ChevronUp, Home, LogOut, Menu, MessageCircle, PenLine, Plus, Printer, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -459,10 +459,11 @@ function readIntakeDraft(key: string): IntakeDraft {
   };
 }
 
-async function createTemporaryBillLink(payload: { billNumber: string }) {
-  await httpClient.post("/bills/print-links", {
+async function sendBillByWhatsapp(payload: { billNumber: string }) {
+  const response = await httpClient.post<{ notificationStatus: { whatsappQueued: boolean } }>("/bills/whatsapp-links", {
     billNumber: payload.billNumber,
   });
+  return response.data.notificationStatus.whatsappQueued;
 }
 
 async function saveIntakeBill(payload: {
@@ -880,6 +881,7 @@ export function RepairIntakePage() {
   const workItemDropdownRef = useRef<HTMLDivElement | null>(null);
   const signatureInputRef = useRef<HTMLInputElement | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isSendingWhatsapp, setIsSendingWhatsapp] = useState(false);
   const [isSavingBill, setIsSavingBill] = useState(false);
   const [isSearchingBills, setIsSearchingBills] = useState(false);
   const [deliveringBillId, setDeliveringBillId] = useState<number | null>(null);
@@ -1543,18 +1545,25 @@ export function RepairIntakePage() {
 
   const handlePrint = () => {
     setIsPrinting(true);
-
-    createTemporaryBillLink({
-        billNumber,
-    }).catch((error) => {
-      console.warn("Unable to create temporary bill link before printing.", error);
-    });
-
     window.print();
 
     window.setTimeout(() => {
       setIsPrinting(false);
     }, 500);
+  };
+
+  const handleWhatsapp = async () => {
+    if (isSendingWhatsapp) return;
+    setIsSendingWhatsapp(true);
+    try {
+      const queued = await sendBillByWhatsapp({ billNumber });
+      window.alert(queued ? "Bill sent by WhatsApp successfully." : "WhatsApp is not enabled or configured for this shop.");
+    } catch (error) {
+      console.error("Unable to send bill by WhatsApp.", error);
+      window.alert("Unable to send bill by WhatsApp. Please try again.");
+    } finally {
+      setIsSendingWhatsapp(false);
+    }
   };
 
   return (
@@ -2690,6 +2699,15 @@ export function RepairIntakePage() {
                 </Button>
                 <Button type="button" onClick={handlePrint} isLoading={isPrinting} leftIcon={<Printer className="h-4 w-4" />}>
                   Print
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void handleWhatsapp()}
+                  isLoading={isSendingWhatsapp}
+                  leftIcon={<MessageCircle className="h-4 w-4" />}
+                >
+                  WhatsApp
                 </Button>
               </div>
               <BillPrintLayout
