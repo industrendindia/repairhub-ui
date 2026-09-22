@@ -166,6 +166,14 @@ type DeliveryGalleryEntry = {
   deliveredOn: string | null;
 };
 
+type DeliveryGalleryPage = {
+  items: DeliveryGalleryEntry[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+};
+
 type EmployeeDraft = {
   employeeCode: string;
   firstName: string;
@@ -532,8 +540,10 @@ async function addDeliveryPhotos(billId: number, photos: ItemPhoto[]) {
   await httpClient.post(`/bills/${billId}/delivery-photos`, { photos });
 }
 
-async function getDeliveryGallery() {
-  const response = await httpClient.get<DeliveryGalleryEntry[]>("/delivery-gallery");
+async function getDeliveryGallery(page: number) {
+  const response = await httpClient.get<DeliveryGalleryPage>("/delivery-gallery", {
+    params: { page: page - 1, size: 24 },
+  });
   return response.data;
 }
 
@@ -917,6 +927,9 @@ export function RepairIntakePage() {
   const [additionalDeliveryPhotos, setAdditionalDeliveryPhotos] = useState<ItemPhoto[]>([]);
   const [isSavingDeliveryPhotos, setIsSavingDeliveryPhotos] = useState(false);
   const [deliveryGallery, setDeliveryGallery] = useState<DeliveryGalleryEntry[]>([]);
+  const [deliveryGalleryPage, setDeliveryGalleryPage] = useState(1);
+  const [deliveryGalleryPageCount, setDeliveryGalleryPageCount] = useState(0);
+  const [deliveryGalleryTotal, setDeliveryGalleryTotal] = useState(0);
   const [isLoadingGallery, setIsLoadingGallery] = useState(false);
   const [isRequestingDeliveryOtp, setIsRequestingDeliveryOtp] = useState(false);
   const [billSearchQuery, setBillSearchQuery] = useState("");
@@ -1684,15 +1697,22 @@ export function RepairIntakePage() {
     }
   };
 
-  const openDeliveryGallery = async () => {
+  const openDeliveryGallery = async (page = 1) => {
     setIsMenuOpen(false);
     goTo("deliveryGallery");
     setIsLoadingGallery(true);
     try {
-      setDeliveryGallery(await getDeliveryGallery());
+      const gallery = await getDeliveryGallery(page);
+      setDeliveryGallery(gallery.items);
+      setDeliveryGalleryPage(gallery.page + 1);
+      setDeliveryGalleryPageCount(gallery.totalPages);
+      setDeliveryGalleryTotal(gallery.totalElements);
     } catch (error) {
       console.error("Unable to load product gallery.", error);
       setDeliveryGallery([]);
+      setDeliveryGalleryPage(1);
+      setDeliveryGalleryPageCount(0);
+      setDeliveryGalleryTotal(0);
     } finally {
       setIsLoadingGallery(false);
     }
@@ -2876,7 +2896,9 @@ export function RepairIntakePage() {
             <section className="rounded-lg border bg-card p-4 shadow-soft sm:p-5">
               <div className="mb-5">
                 <h2 className="text-lg font-semibold">Product Gallery</h2>
-                <p className="text-sm text-muted-foreground">Photos from completed customer deliveries.</p>
+                <p className="text-sm text-muted-foreground">
+                  Photos from completed customer deliveries{deliveryGalleryTotal ? ` · ${deliveryGalleryTotal} photos` : ""}.
+                </p>
               </div>
               {isLoadingGallery ? <p className="py-10 text-center text-sm text-muted-foreground">Loading gallery...</p>
                 : deliveryGallery.length ? (
@@ -2889,6 +2911,29 @@ export function RepairIntakePage() {
                     ))}
                   </div>
                 ) : <p className="rounded-md border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">No delivered product photos yet.</p>}
+              {!isLoadingGallery && deliveryGalleryPageCount > 1 ? (
+                <div className="mt-5 flex items-center justify-between gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={deliveryGalleryPage <= 1}
+                    onClick={() => void openDeliveryGallery(deliveryGalleryPage - 1)}
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-muted-foreground">
+                    Page {deliveryGalleryPage} of {deliveryGalleryPageCount}
+                  </span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={deliveryGalleryPage >= deliveryGalleryPageCount}
+                    onClick={() => void openDeliveryGallery(deliveryGalleryPage + 1)}
+                  >
+                    Next
+                  </Button>
+                </div>
+              ) : null}
             </section>
           ) : null}
 
