@@ -12,7 +12,7 @@ import { Input } from "@/shared/components/ui/Input";
 import { Select } from "@/shared/components/ui/Select";
 import { Textarea } from "@/shared/components/ui/Textarea";
 
-type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "billingHistory" | "repairMaintenance" | "employees" | "deliveryGallery";
+type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "billingHistory" | "repairMaintenance" | "employees" | "deliveryGallery" | "whatsappConfiguration";
 
 type CustomerDetails = {
   customerName: string;
@@ -174,6 +174,38 @@ type DeliveryGalleryPage = {
   totalPages: number;
 };
 
+type WhatsappConfiguration = {
+  companyCode: string;
+  companyName: string;
+  configured: boolean;
+  integratedNumber: string | null;
+  templateName: string | null;
+  templateLanguage: string | null;
+  templateNamespace: string | null;
+  templateComponents: string | null;
+  otpTemplateName: string | null;
+  otpTemplateLanguage: string | null;
+  otpTemplateNamespace: string | null;
+  active: boolean;
+  apiKeyConfigured: boolean;
+};
+
+type WhatsappConfigurationDraft = {
+  companyCode: string;
+  companyName: string;
+  apiKey: string;
+  integratedNumber: string;
+  templateName: string;
+  templateLanguage: string;
+  templateNamespace: string;
+  templateComponents: string;
+  otpTemplateName: string;
+  otpTemplateLanguage: string;
+  otpTemplateNamespace: string;
+  active: boolean;
+  apiKeyConfigured: boolean;
+};
+
 type EmployeeDraft = {
   employeeCode: string;
   firstName: string;
@@ -281,9 +313,9 @@ const steps: Array<{ key: IntakeStep; label: string }> = [
 ];
 
 const workflowSteps = steps.filter((entry) => entry.key !== "billingHistory");
-const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory", "repairMaintenance", "employees", "deliveryGallery"];
+const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory", "repairMaintenance", "employees", "deliveryGallery", "whatsappConfiguration"];
 
-const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing History", "Product Gallery"];
+const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing History", "Product Gallery", "WhatsApp Configuration"];
 const billingHistoryPageSize = 10;
 const maxImageSizeBytes = 1024 * 1024;
 const maxSignatureSizeBytes = 150 * 1024;
@@ -599,6 +631,26 @@ async function createCompany(company: { companyCode: string; name: string; invoi
 async function searchCompanies(q: string) {
   const response = await httpClient.get<CompanyDetails[]>("/companies", { params: { q } });
   return response.data;
+}
+
+async function searchWhatsappConfigurations(q: string) {
+  const response = await httpClient.get<WhatsappConfiguration[]>("/whatsapp-configurations", { params: { q } });
+  return response.data;
+}
+
+async function saveWhatsappConfiguration(configuration: WhatsappConfigurationDraft) {
+  await httpClient.put(`/whatsapp-configurations/${encodeURIComponent(configuration.companyCode)}`, {
+    apiKey: configuration.apiKey,
+    integratedNumber: configuration.integratedNumber,
+    templateName: configuration.templateName,
+    templateLanguage: configuration.templateLanguage,
+    templateNamespace: configuration.templateNamespace,
+    templateComponents: configuration.templateComponents,
+    otpTemplateName: configuration.otpTemplateName,
+    otpTemplateLanguage: configuration.otpTemplateLanguage,
+    otpTemplateNamespace: configuration.otpTemplateNamespace,
+    active: configuration.active,
+  });
 }
 
 async function uploadCompanyLogo(companyCode: string, file: File) {
@@ -948,6 +1000,11 @@ export function RepairIntakePage() {
   const [hasSearchedCompanies, setHasSearchedCompanies] = useState(false);
   const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", deliveryGalleryEnabled: false });
   const [companyLogo, setCompanyLogo] = useState<File | null>(null);
+  const [whatsappConfigurationSearch, setWhatsappConfigurationSearch] = useState("");
+  const [whatsappConfigurations, setWhatsappConfigurations] = useState<WhatsappConfiguration[]>([]);
+  const [isSearchingWhatsappConfigurations, setIsSearchingWhatsappConfigurations] = useState(false);
+  const [isSavingWhatsappConfiguration, setIsSavingWhatsappConfiguration] = useState(false);
+  const [whatsappConfigurationDraft, setWhatsappConfigurationDraft] = useState<WhatsappConfigurationDraft | null>(null);
   const [employeeDraft, setEmployeeDraft] = useState<EmployeeDraft>(emptyEmployeeDraft);
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
   const [isSavingEmployee, setIsSavingEmployee] = useState(false);
@@ -1718,6 +1775,57 @@ export function RepairIntakePage() {
     }
   };
 
+  const loadWhatsappConfigurations = async (query = whatsappConfigurationSearch) => {
+    setIsMenuOpen(false);
+    goTo("whatsappConfiguration");
+    setIsSearchingWhatsappConfigurations(true);
+    try {
+      setWhatsappConfigurations(await searchWhatsappConfigurations(query.trim()));
+    } catch (error) {
+      console.error("Unable to load WhatsApp configurations.", error);
+      setWhatsappConfigurations([]);
+      window.alert("Unable to load WhatsApp configurations.");
+    } finally {
+      setIsSearchingWhatsappConfigurations(false);
+    }
+  };
+
+  const editWhatsappConfiguration = (configuration: WhatsappConfiguration) => {
+    setWhatsappConfigurationDraft({
+      companyCode: configuration.companyCode,
+      companyName: configuration.companyName,
+      apiKey: "",
+      integratedNumber: configuration.integratedNumber ?? "",
+      templateName: configuration.templateName ?? "",
+      templateLanguage: configuration.templateLanguage ?? "en",
+      templateNamespace: configuration.templateNamespace ?? "",
+      templateComponents: configuration.templateComponents ?? "",
+      otpTemplateName: configuration.otpTemplateName ?? "",
+      otpTemplateLanguage: configuration.otpTemplateLanguage ?? "en",
+      otpTemplateNamespace: configuration.otpTemplateNamespace ?? "",
+      active: configuration.configured ? configuration.active : true,
+      apiKeyConfigured: configuration.apiKeyConfigured,
+    });
+  };
+
+  const submitWhatsappConfiguration = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!whatsappConfigurationDraft || isSavingWhatsappConfiguration) return;
+    setIsSavingWhatsappConfiguration(true);
+    try {
+      await saveWhatsappConfiguration(whatsappConfigurationDraft);
+      window.alert(`WhatsApp configuration saved for ${whatsappConfigurationDraft.companyCode}.`);
+      setWhatsappConfigurationDraft(null);
+      setWhatsappConfigurations(await searchWhatsappConfigurations(whatsappConfigurationSearch.trim()));
+    } catch (error) {
+      console.error("Unable to save WhatsApp configuration.", error);
+      const apiError = error as ApiError;
+      window.alert(apiError.message || "Unable to save WhatsApp configuration.");
+    } finally {
+      setIsSavingWhatsappConfiguration(false);
+    }
+  };
+
   const handleWhatsapp = async () => {
     if (isSendingWhatsapp) return;
     setIsSendingWhatsapp(true);
@@ -1754,6 +1862,7 @@ export function RepairIntakePage() {
                     {navigationMenuItems
                       .filter((item) => item !== "Employees" || canManageEmployees)
                       .filter((item) => item !== "Product Gallery" || session?.user.company?.deliveryGalleryEnabled)
+                      .filter((item) => item !== "WhatsApp Configuration" || isSystemAdministrator)
                       .map((item) => (
                       <button
                         key={item}
@@ -1771,6 +1880,8 @@ export function RepairIntakePage() {
                             void openBillingHistory();
                           } else if (item === "Product Gallery") {
                             void openDeliveryGallery();
+                          } else if (item === "WhatsApp Configuration") {
+                            void loadWhatsappConfigurations();
                           }
                         }}
                       >
@@ -2937,6 +3048,84 @@ export function RepairIntakePage() {
             </section>
           ) : null}
 
+          {step === "whatsappConfiguration" && isSystemAdministrator ? (
+            <section className="space-y-5">
+              <div className="rounded-lg border bg-card p-5 shadow-soft">
+                <div className="mb-5">
+                  <h2 className="text-lg font-semibold">WhatsApp MSG91 Configuration</h2>
+                  <p className="text-sm text-muted-foreground">Search a shop, review its current configuration, or configure it for WhatsApp billing and delivery OTP messages.</p>
+                </div>
+                <form
+                  className="flex flex-col gap-3 sm:flex-row"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    void loadWhatsappConfigurations();
+                  }}
+                >
+                  <Input
+                    aria-label="Search shop WhatsApp configurations"
+                    placeholder="Company code or shop name"
+                    value={whatsappConfigurationSearch}
+                    onChange={(event) => setWhatsappConfigurationSearch(event.target.value)}
+                  />
+                  <Button type="submit" isLoading={isSearchingWhatsappConfigurations}>Search</Button>
+                </form>
+                <div className="mt-5 grid gap-3 md:grid-cols-2">
+                  {whatsappConfigurations.map((configuration) => (
+                    <button
+                      key={configuration.companyCode}
+                      type="button"
+                      className="rounded-md border p-4 text-left hover:bg-muted/50"
+                      onClick={() => editWhatsappConfiguration(configuration)}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div><p className="font-semibold">{configuration.companyName}</p><p className="text-sm text-muted-foreground">{configuration.companyCode}</p></div>
+                        <span className={`rounded-full px-2 py-1 text-xs ${configuration.configured && configuration.active ? "bg-secondary text-secondary-foreground" : "bg-muted text-muted-foreground"}`}>
+                          {configuration.configured ? (configuration.active ? "Active" : "Inactive") : "Not configured"}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm">Sender: {configuration.integratedNumber || "Not configured"}</p>
+                      <p className="text-sm">Auth key: {configuration.apiKeyConfigured ? "Configured" : "Missing"}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {whatsappConfigurationDraft ? (
+                <form className="rounded-lg border bg-card p-5 shadow-soft" onSubmit={submitWhatsappConfiguration}>
+                  <div className="mb-5">
+                    <h2 className="text-lg font-semibold">{whatsappConfigurationDraft.companyName}</h2>
+                    <p className="text-sm text-muted-foreground">Company code: {whatsappConfigurationDraft.companyCode}</p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField label={`MSG91 auth key${whatsappConfigurationDraft.apiKeyConfigured ? " (leave blank to keep existing)" : ""}`} htmlFor="whatsappApiKey">
+                      <Input id="whatsappApiKey" type="password" required={!whatsappConfigurationDraft.apiKeyConfigured && whatsappConfigurationDraft.active} value={whatsappConfigurationDraft.apiKey} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, apiKey: event.target.value } : current)} />
+                    </FormField>
+                    <FormField label="Integrated WhatsApp number" htmlFor="whatsappIntegratedNumber">
+                      <Input id="whatsappIntegratedNumber" required={whatsappConfigurationDraft.active} placeholder="918421992222" value={whatsappConfigurationDraft.integratedNumber} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, integratedNumber: event.target.value } : current)} />
+                    </FormField>
+                    <FormField label="Bill template name" htmlFor="whatsappTemplateName">
+                      <Input id="whatsappTemplateName" required={whatsappConfigurationDraft.active} value={whatsappConfigurationDraft.templateName} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, templateName: event.target.value } : current)} />
+                    </FormField>
+                    <FormField label="Bill template language" htmlFor="whatsappTemplateLanguage">
+                      <Input id="whatsappTemplateLanguage" value={whatsappConfigurationDraft.templateLanguage} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, templateLanguage: event.target.value } : current)} />
+                    </FormField>
+                    <div className="md:col-span-2"><FormField label="Bill template namespace" htmlFor="whatsappTemplateNamespace"><Input id="whatsappTemplateNamespace" required={whatsappConfigurationDraft.active} value={whatsappConfigurationDraft.templateNamespace} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, templateNamespace: event.target.value } : current)} /></FormField></div>
+                    <div className="md:col-span-2"><FormField label="Bill template component mapping (JSON)" htmlFor="whatsappTemplateComponents"><Textarea id="whatsappTemplateComponents" rows={4} placeholder='{"body_1":"CUSTOMER_NAME","body_2":"BILL_NUMBER"}' value={whatsappConfigurationDraft.templateComponents} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, templateComponents: event.target.value } : current)} /></FormField></div>
+                    <FormField label="Delivery OTP template name" htmlFor="whatsappOtpTemplateName"><Input id="whatsappOtpTemplateName" required={whatsappConfigurationDraft.active} value={whatsappConfigurationDraft.otpTemplateName} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, otpTemplateName: event.target.value } : current)} /></FormField>
+                    <FormField label="Delivery OTP language" htmlFor="whatsappOtpTemplateLanguage"><Input id="whatsappOtpTemplateLanguage" value={whatsappConfigurationDraft.otpTemplateLanguage} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, otpTemplateLanguage: event.target.value } : current)} /></FormField>
+                    <div className="md:col-span-2"><FormField label="Delivery OTP template namespace" htmlFor="whatsappOtpTemplateNamespace"><Input id="whatsappOtpTemplateNamespace" required={whatsappConfigurationDraft.active} value={whatsappConfigurationDraft.otpTemplateNamespace} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, otpTemplateNamespace: event.target.value } : current)} /></FormField></div>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm md:col-span-2"><input type="checkbox" checked={whatsappConfigurationDraft.active} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, active: event.target.checked } : current)} />Active for this shop</label>
+                  </div>
+                  <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <Button type="button" variant="outline" onClick={() => setWhatsappConfigurationDraft(null)}>Cancel</Button>
+                    <Button type="submit" isLoading={isSavingWhatsappConfiguration}>Save configuration</Button>
+                  </div>
+                </form>
+              ) : null}
+            </section>
+          ) : null}
+
           {step === "final" ? (
             <section className="print-root">
               <div className="no-print mb-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -2976,7 +3165,7 @@ export function RepairIntakePage() {
           ) : null}
         </section>
 
-        {step !== "employees" && step !== "deliveryGallery" ? (
+        {step !== "employees" && step !== "deliveryGallery" && step !== "whatsappConfiguration" ? (
         <aside className="no-print h-fit rounded-lg border bg-card p-5 shadow-soft xl:sticky xl:top-6">
           <h2 className="text-base font-semibold">Bill summary</h2>
           <div className="mt-4 space-y-3 text-sm">
