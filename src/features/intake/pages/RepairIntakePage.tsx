@@ -12,7 +12,7 @@ import { Input } from "@/shared/components/ui/Input";
 import { Select } from "@/shared/components/ui/Select";
 import { Textarea } from "@/shared/components/ui/Textarea";
 
-type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "billingHistory" | "repairMaintenance" | "employees";
+type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "billingHistory" | "repairMaintenance" | "employees" | "deliveryGallery";
 
 type CustomerDetails = {
   customerName: string;
@@ -155,6 +155,15 @@ type CompanyDetails = {
   email: string | null;
   address: string | null;
   active: boolean;
+  deliveryGalleryEnabled: boolean;
+};
+
+type DeliveryGalleryEntry = {
+  deliveryPhotoId: number;
+  photoUrl: string;
+  billNumber: string;
+  customerName: string;
+  deliveredOn: string | null;
 };
 
 type EmployeeDraft = {
@@ -264,9 +273,9 @@ const steps: Array<{ key: IntakeStep; label: string }> = [
 ];
 
 const workflowSteps = steps.filter((entry) => entry.key !== "billingHistory");
-const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory", "repairMaintenance", "employees"];
+const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory", "repairMaintenance", "employees", "deliveryGallery"];
 
-const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing History"];
+const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing History", "Product Gallery"];
 const billingHistoryPageSize = 10;
 const maxImageSizeBytes = 1024 * 1024;
 const maxSignatureSizeBytes = 150 * 1024;
@@ -516,6 +525,15 @@ async function requestDeliveryOtp(billId: number) {
 
 async function deliverBill(billId: number, otp: string) {
   const response = await httpClient.post<{ repairStatus: string; deliveredOn: string }>(`/bills/${billId}/deliver`, { otp });
+  return response.data;
+}
+
+async function addDeliveryPhotos(billId: number, photos: ItemPhoto[]) {
+  await httpClient.post(`/bills/${billId}/delivery-photos`, { photos });
+}
+
+async function getDeliveryGallery() {
+  const response = await httpClient.get<DeliveryGalleryEntry[]>("/delivery-gallery");
   return response.data;
 }
 
@@ -894,6 +912,9 @@ export function RepairIntakePage() {
   const [deliveryOtp, setDeliveryOtp] = useState("");
   const [deliveryOtpNotice, setDeliveryOtpNotice] = useState("");
   const [deliveryOtpError, setDeliveryOtpError] = useState("");
+  const [deliveryPhotos, setDeliveryPhotos] = useState<ItemPhoto[]>([]);
+  const [deliveryGallery, setDeliveryGallery] = useState<DeliveryGalleryEntry[]>([]);
+  const [isLoadingGallery, setIsLoadingGallery] = useState(false);
   const [isRequestingDeliveryOtp, setIsRequestingDeliveryOtp] = useState(false);
   const [billSearchQuery, setBillSearchQuery] = useState("");
   const [billSearchResults, setBillSearchResults] = useState<BillSearchResult[]>([]);
@@ -908,7 +929,7 @@ export function RepairIntakePage() {
   const [companySearchResults, setCompanySearchResults] = useState<CompanyDetails[]>([]);
   const [isSearchingCompanies, setIsSearchingCompanies] = useState(false);
   const [hasSearchedCompanies, setHasSearchedCompanies] = useState(false);
-  const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "" });
+  const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", deliveryGalleryEnabled: false });
   const [companyLogo, setCompanyLogo] = useState<File | null>(null);
   const [employeeDraft, setEmployeeDraft] = useState<EmployeeDraft>(emptyEmployeeDraft);
   const [editingEmployeeId, setEditingEmployeeId] = useState<number | null>(null);
@@ -1217,14 +1238,32 @@ export function RepairIntakePage() {
     setIsSavingEmployee(true);
     try {
       await createCompany(companyDraft);
-      if (companyLogo) await uploadCompanyLogo(companyDraft.companyCode.toUpperCase(), companyLogo);
-      setEmployeeDraft((current) => ({ ...current, companyCode: companyDraft.companyCode.toUpperCase() }));
-      setCompanyDraft({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "" });
+      const createdCompanyCode = companyDraft.companyCode.toUpperCase();
+      let logoUploadFailed = false;
+      if (companyLogo) {
+        try {
+          await uploadCompanyLogo(createdCompanyCode, companyLogo);
+        } catch (error) {
+          logoUploadFailed = true;
+          console.error("Company created, but its logo could not be uploaded.", error);
+        }
+      }
+      setEmployeeDraft((current) => ({ ...current, companyCode: createdCompanyCode }));
+      setCompanyDraft({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", deliveryGalleryEnabled: false });
       setCompanyLogo(null);
-      window.alert("Company created. You can now create its owner below.");
+      window.alert(
+        logoUploadFailed
+          ? "Company created, but its logo could not be uploaded. You can still create its owner below."
+          : "Company created. You can now create its owner below."
+      );
     } catch (error) {
       console.error("Unable to create company.", error);
-      window.alert("Unable to create company. Check that the company code is unique.");
+      const apiError = error as ApiError;
+      window.alert(
+        apiError.code === "COMPANY_EXISTS"
+          ? "That company ID already exists. Search for the company before creating it again."
+          : apiError.message || "Unable to create company. Please try again."
+      );
     } finally {
       setIsSavingEmployee(false);
     }
@@ -1380,6 +1419,7 @@ export function RepairIntakePage() {
     setDeliveryOtp("");
     setDeliveryOtpError("");
     setDeliveryOtpNotice("");
+    setDeliveryPhotos([]);
     void sendDeliveryOtp(bill);
   };
 
@@ -1398,6 +1438,14 @@ export function RepairIntakePage() {
       ));
       setDeliveryOtpBill(null);
       setDeliveryOtp("");
+      if (deliveryPhotos.length) {
+        try {
+          await addDeliveryPhotos(bill.billId, deliveryPhotos);
+        } catch (photoError) {
+          console.error("Unable to save delivery photos.", photoError);
+          window.alert("The bill was marked delivered, but the optional photos could not be saved.");
+        }
+      }
     } catch (error) {
       console.error("Unable to mark bill as delivered.", error);
       const apiError = error as ApiError;
@@ -1592,6 +1640,20 @@ export function RepairIntakePage() {
     }, 500);
   };
 
+  const openDeliveryGallery = async () => {
+    setIsMenuOpen(false);
+    goTo("deliveryGallery");
+    setIsLoadingGallery(true);
+    try {
+      setDeliveryGallery(await getDeliveryGallery());
+    } catch (error) {
+      console.error("Unable to load product gallery.", error);
+      setDeliveryGallery([]);
+    } finally {
+      setIsLoadingGallery(false);
+    }
+  };
+
   const handleWhatsapp = async () => {
     if (isSendingWhatsapp) return;
     setIsSendingWhatsapp(true);
@@ -1627,6 +1689,7 @@ export function RepairIntakePage() {
                   <nav className="absolute left-0 top-12 z-30 w-56 overflow-hidden rounded-md border bg-card py-2 shadow-soft">
                     {navigationMenuItems
                       .filter((item) => item !== "Employees" || canManageEmployees)
+                      .filter((item) => item !== "Product Gallery" || session?.user.company?.deliveryGalleryEnabled)
                       .map((item) => (
                       <button
                         key={item}
@@ -1642,6 +1705,8 @@ export function RepairIntakePage() {
                             void openEmployeeManagement();
                           } else if (item === "Billing History") {
                             void openBillingHistory();
+                          } else if (item === "Product Gallery") {
+                            void openDeliveryGallery();
                           }
                         }}
                       >
@@ -2390,6 +2455,10 @@ export function RepairIntakePage() {
                     <FormField label="Address" htmlFor="newCompanyAddress">
                       <Input id="newCompanyAddress" value={companyDraft.address} onChange={(event) => setCompanyDraft((current) => ({ ...current, address: event.target.value }))} />
                     </FormField>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm md:col-span-2">
+                      <input type="checkbox" checked={companyDraft.deliveryGalleryEnabled} onChange={(event) => setCompanyDraft((current) => ({ ...current, deliveryGalleryEnabled: event.target.checked }))} />
+                      Enable optional delivery photos and product gallery
+                    </label>
                     <div className="md:col-span-2">
                       <FileUpload
                         label="Upload company logo"
@@ -2731,6 +2800,26 @@ export function RepairIntakePage() {
             </form>
           ) : null}
 
+          {step === "deliveryGallery" && session?.user.company?.deliveryGalleryEnabled ? (
+            <section className="rounded-lg border bg-card p-4 shadow-soft sm:p-5">
+              <div className="mb-5">
+                <h2 className="text-lg font-semibold">Product Gallery</h2>
+                <p className="text-sm text-muted-foreground">Photos from completed customer deliveries.</p>
+              </div>
+              {isLoadingGallery ? <p className="py-10 text-center text-sm text-muted-foreground">Loading gallery...</p>
+                : deliveryGallery.length ? (
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                    {deliveryGallery.map((entry) => (
+                      <figure key={entry.deliveryPhotoId} className="overflow-hidden rounded-lg border bg-background">
+                        <a href={entry.photoUrl} target="_blank" rel="noreferrer"><img src={entry.photoUrl} alt={`Delivered order ${entry.billNumber}`} className="aspect-square w-full object-cover" loading="lazy" /></a>
+                        <figcaption className="p-3 text-xs"><p className="font-medium">{entry.customerName}</p><p className="text-muted-foreground">{entry.billNumber}</p>{entry.deliveredOn ? <p className="text-muted-foreground">Delivered {formatDate(entry.deliveredOn)}</p> : null}</figcaption>
+                      </figure>
+                    ))}
+                  </div>
+                ) : <p className="rounded-md border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">No delivered product photos yet.</p>}
+            </section>
+          ) : null}
+
           {step === "final" ? (
             <section className="print-root">
               <div className="no-print mb-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -2770,7 +2859,7 @@ export function RepairIntakePage() {
           ) : null}
         </section>
 
-        {step !== "employees" ? (
+        {step !== "employees" && step !== "deliveryGallery" ? (
         <aside className="no-print h-fit rounded-lg border bg-card p-5 shadow-soft xl:sticky xl:top-6">
           <h2 className="text-base font-semibold">Bill summary</h2>
           <div className="mt-4 space-y-3 text-sm">
@@ -2840,6 +2929,9 @@ export function RepairIntakePage() {
                 />
               </FormField>
               {deliveryOtpNotice ? <p className="text-sm text-muted-foreground">{deliveryOtpNotice}</p> : null}
+              {session?.user.company?.deliveryGalleryEnabled ? (
+                <FileUpload label="Add delivery photos (optional)" accept="image/*" capture="environment" multiple maxFileSizeBytes={maxImageSizeBytes} onFilesChange={(files) => { void Promise.all(files.slice(0, 5).map(fileToPhoto)).then(setDeliveryPhotos); }} />
+              ) : null}
               <p className="text-xs text-muted-foreground">If the customer cannot receive the message, the shop fallback OTP is 987600.</p>
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                 <Button type="button" variant="outline" onClick={() => setDeliveryOtpBill(null)}>Cancel</Button>

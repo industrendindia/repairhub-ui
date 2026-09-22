@@ -12,6 +12,7 @@ export type AuthUser = {
     mobile?: string | null;
     email?: string | null;
     gstNumber?: string | null;
+    deliveryGalleryEnabled?: boolean;
   };
 };
 
