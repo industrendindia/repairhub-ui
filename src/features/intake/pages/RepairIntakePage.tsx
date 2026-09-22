@@ -928,6 +928,7 @@ export function RepairIntakePage() {
   const [companySearch, setCompanySearch] = useState("");
   const [companySearchResults, setCompanySearchResults] = useState<CompanyDetails[]>([]);
   const [isSearchingCompanies, setIsSearchingCompanies] = useState(false);
+  const [uploadingLogoCompanyCode, setUploadingLogoCompanyCode] = useState<string | null>(null);
   const [hasSearchedCompanies, setHasSearchedCompanies] = useState(false);
   const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", deliveryGalleryEnabled: false });
   const [companyLogo, setCompanyLogo] = useState<File | null>(null);
@@ -1410,6 +1411,28 @@ export function RepairIntakePage() {
       setDeliveryOtpError("Unable to create the OTP. Please retry before marking delivered.");
     } finally {
       setIsRequestingDeliveryOtp(false);
+    }
+  };
+
+  const replaceCompanyLogo = async (companyCode: string, file: File) => {
+    if (file.size > maxImageSizeBytes) {
+      window.alert("The company logo must be 1 MB or smaller.");
+      return;
+    }
+    if (!["image/png", "image/jpeg", "image/gif"].includes(file.type)) {
+      window.alert("Please choose a PNG, JPEG, or GIF logo.");
+      return;
+    }
+    setUploadingLogoCompanyCode(companyCode);
+    try {
+      await uploadCompanyLogo(companyCode, file);
+      window.alert(`Logo for ${companyCode} uploaded successfully.`);
+    } catch (error) {
+      console.error("Unable to upload company logo.", error);
+      const apiError = error as ApiError;
+      window.alert(apiError.message || "Unable to upload the company logo. Please try again.");
+    } finally {
+      setUploadingLogoCompanyCode(null);
     }
   };
 
@@ -2415,6 +2438,22 @@ export function RepairIntakePage() {
                           >
                             Use for employee
                           </Button>
+                          <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
+                            <Upload className="h-4 w-4" />
+                            {uploadingLogoCompanyCode === company.companyCode ? "Uploading logo..." : "Upload/replace logo"}
+                            <input
+                              className="sr-only"
+                              type="file"
+                              accept="image/png,image/jpeg,image/gif"
+                              disabled={uploadingLogoCompanyCode !== null}
+                              onChange={async (event) => {
+                                const input = event.currentTarget;
+                                const file = input.files?.[0];
+                                if (file) await replaceCompanyLogo(company.companyCode, file);
+                                input.value = "";
+                              }}
+                            />
+                          </label>
                         </div>
                       ))}
                     </div>
