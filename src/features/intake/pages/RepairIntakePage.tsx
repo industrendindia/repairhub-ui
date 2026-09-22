@@ -154,8 +154,32 @@ type CompanyDetails = {
   mobile: string | null;
   email: string | null;
   address: string | null;
+  website: string | null;
   active: boolean;
   deliveryGalleryEnabled: boolean;
+  itemsLabel: string | null;
+  itemLabel: string | null;
+  categoryLabel: string | null;
+  categoryOptions: string | null;
+  maintenanceLabel: string | null;
+  staffLabel: string | null;
+  jobCardLabel: string | null;
+  inProgressLabel: string | null;
+  completedLabel: string | null;
+};
+
+type TerminologyDraft = {
+  companyCode: string;
+  companyName: string;
+  itemsLabel: string;
+  itemLabel: string;
+  categoryLabel: string;
+  categoryOptions: string;
+  maintenanceLabel: string;
+  staffLabel: string;
+  jobCardLabel: string;
+  inProgressLabel: string;
+  completedLabel: string;
 };
 
 type DeliveryGalleryEntry = {
@@ -624,13 +648,17 @@ async function deactivateManagedEmployee(employeeId: number) {
   return response.data;
 }
 
-async function createCompany(company: { companyCode: string; name: string; invoiceHeaderText: string; gstNumber: string; mobile: string; email: string; address: string }) {
+async function createCompany(company: { companyCode: string; name: string; invoiceHeaderText: string; gstNumber: string; mobile: string; email: string; address: string; website: string; deliveryGalleryEnabled: boolean }) {
   await httpClient.post("/companies", company);
 }
 
 async function searchCompanies(q: string) {
   const response = await httpClient.get<CompanyDetails[]>("/companies", { params: { q } });
   return response.data;
+}
+
+async function saveCompanyTerminology(configuration: TerminologyDraft) {
+  await httpClient.put(`/companies/${encodeURIComponent(configuration.companyCode)}/terminology`, configuration);
 }
 
 async function searchWhatsappConfigurations(q: string) {
@@ -710,6 +738,7 @@ type BillPrintLayoutProps = {
   invoiceHeaderText?: string | null;
   companyAddress: string;
   companyContact: string;
+  companyWebsite: string;
   gstNumber?: string | null;
   logoUrl?: string | null;
   billNumber: string;
@@ -727,6 +756,7 @@ function BillPrintLayout({
   invoiceHeaderText,
   companyAddress,
   companyContact,
+  companyWebsite,
   gstNumber,
   logoUrl,
   billNumber,
@@ -785,7 +815,7 @@ function BillPrintLayout({
           ) : null}
           <p className="mt-2 text-[11px]">{companyAddress}</p>
           <p className="mt-1 text-[11px]">{companyContact}</p>
-          <p className="mt-1 text-[11px]">https://krushnaelecticalandelectronics.com</p>
+          {companyWebsite ? <p className="mt-1 text-[11px]">{companyWebsite}</p> : null}
           {gstNumber?.trim() ? <p className="mt-2 text-[11px]">GSTIN : {gstNumber}</p> : null}
         </div>
         <div className="text-[12px] font-bold">
@@ -998,8 +1028,10 @@ export function RepairIntakePage() {
   const [isSearchingCompanies, setIsSearchingCompanies] = useState(false);
   const [uploadingLogoCompanyCode, setUploadingLogoCompanyCode] = useState<string | null>(null);
   const [hasSearchedCompanies, setHasSearchedCompanies] = useState(false);
-  const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", deliveryGalleryEnabled: false });
+  const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", website: "", deliveryGalleryEnabled: false });
   const [companyLogo, setCompanyLogo] = useState<File | null>(null);
+  const [terminologyDraft, setTerminologyDraft] = useState<TerminologyDraft | null>(null);
+  const [isSavingTerminology, setIsSavingTerminology] = useState(false);
   const [whatsappConfigurationSearch, setWhatsappConfigurationSearch] = useState("");
   const [whatsappConfigurations, setWhatsappConfigurations] = useState<WhatsappConfiguration[]>([]);
   const [isSearchingWhatsappConfigurations, setIsSearchingWhatsappConfigurations] = useState(false);
@@ -1059,6 +1091,26 @@ export function RepairIntakePage() {
   const companyName = session?.user.company?.name ?? "RepairHub Service Center";
   const invoiceHeaderText = session?.user.company?.invoiceHeaderText ?? null;
   const companyAddress = session?.user.company?.address ?? "";
+  const companyWebsite = session?.user.company?.website ?? "";
+  const itemsLabel = session?.user.company?.itemsLabel?.trim() || "Items";
+  const itemLabel = session?.user.company?.itemLabel?.trim() || "Repair item";
+  const categoryLabel = session?.user.company?.categoryLabel?.trim() || "Category";
+  const maintenanceLabel = session?.user.company?.maintenanceLabel?.trim() || "Repair Maintenance";
+  const staffLabel = session?.user.company?.staffLabel?.trim() || "Technician";
+  const jobCardLabel = session?.user.company?.jobCardLabel?.trim() || "Job Card";
+  const inProgressLabel = session?.user.company?.inProgressLabel?.trim() || "Under repair";
+  const completedLabel = session?.user.company?.completedLabel?.trim() || "Completed";
+  const categoryOptions = useMemo(() => {
+    const configured = session?.user.company?.categoryOptions
+      ?.split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .map((entry) => {
+        const [value, label] = entry.split("|").map((part) => part.trim());
+        return { value, label: label || value };
+      });
+    return configured?.length ? configured : [{ value: "DOMESTIC", label: "Domestic" }, { value: "INDUSTRIAL", label: "Industrial" }];
+  }, [session?.user.company?.categoryOptions]);
   const companyContact = [
     session?.user.company?.mobile ? `Mob: ${session.user.company.mobile}` : "",
     session?.user.company?.email ?? "",
@@ -1323,7 +1375,7 @@ export function RepairIntakePage() {
         }
       }
       setEmployeeDraft((current) => ({ ...current, companyCode: createdCompanyCode }));
-      setCompanyDraft({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", deliveryGalleryEnabled: false });
+      setCompanyDraft({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", website: "", deliveryGalleryEnabled: false });
       setCompanyLogo(null);
       window.alert(
         logoUploadFailed
@@ -1509,6 +1561,40 @@ export function RepairIntakePage() {
     }
   };
 
+  const editCompanyTerminology = (company: CompanyDetails) => {
+    setTerminologyDraft({
+      companyCode: company.companyCode,
+      companyName: company.name,
+      itemsLabel: company.itemsLabel ?? "Items",
+      itemLabel: company.itemLabel ?? "Repair item",
+      categoryLabel: company.categoryLabel ?? "Category",
+      categoryOptions: company.categoryOptions ?? "DOMESTIC|Domestic\nINDUSTRIAL|Industrial",
+      maintenanceLabel: company.maintenanceLabel ?? "Repair Maintenance",
+      staffLabel: company.staffLabel ?? "Technician",
+      jobCardLabel: company.jobCardLabel ?? "Job Card",
+      inProgressLabel: company.inProgressLabel ?? "Under repair",
+      completedLabel: company.completedLabel ?? "Completed",
+    });
+  };
+
+  const submitCompanyTerminology = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!terminologyDraft || isSavingTerminology) return;
+    setIsSavingTerminology(true);
+    try {
+      await saveCompanyTerminology(terminologyDraft);
+      window.alert(`Labels and categories saved for ${terminologyDraft.companyCode}.`);
+      setTerminologyDraft(null);
+      setCompanySearchResults(await searchCompanies(companySearch.trim()));
+    } catch (error) {
+      console.error("Unable to save company terminology.", error);
+      const apiError = error as ApiError;
+      window.alert(apiError.message || "Unable to save company labels and categories.");
+    } finally {
+      setIsSavingTerminology(false);
+    }
+  };
+
   const openDeliveryOtp = (bill: BillSearchResult) => {
     if (bill.repairStatus === "COMPLETED") return;
     setDeliveryOtpBill(bill);
@@ -1609,8 +1695,8 @@ export function RepairIntakePage() {
 
   const addItem = () => {
     const errors = {
-      itemName: draftItem.workItemId ? "" : "Please select a repair item from the list.",
-      category: draftItem.category ? "" : "Please select a category.",
+      itemName: draftItem.workItemId ? "" : `Please select a ${itemLabel.toLowerCase()} from the list.`,
+      category: draftItem.category ? "" : `Please select a ${categoryLabel.toLowerCase()}.`,
     };
     setItemErrors(errors);
     if (errors.itemName || errors.category) return;
@@ -1886,7 +1972,7 @@ export function RepairIntakePage() {
                         }}
                       >
                         {item === "Home" ? <Home className="h-4 w-4" /> : <span className="h-4 w-4" />}
-                        {item}
+                        {item === "Repair Maintenance" ? maintenanceLabel : item}
                       </button>
                       ))}
                     <div className="my-2 border-t" />
@@ -1918,7 +2004,7 @@ export function RepairIntakePage() {
                     index <= activeIndex ? "border-primary bg-primary text-primary-foreground" : "bg-background text-muted-foreground",
                   ].join(" ")}
                 >
-                  {index + 1}. {entry.label}
+                  {index + 1}. {entry.key === "items" ? itemsLabel : entry.label}
                 </div>
               ))}
             </div>
@@ -2042,7 +2128,7 @@ export function RepairIntakePage() {
                   <h2 className="text-lg font-semibold">Repair items</h2>
                 </div>
                 <div className="grid gap-4 lg:grid-cols-2">
-                  <FormField label="Repair item *" htmlFor="workItemId" error={itemErrors.itemName}>
+                  <FormField label={`${itemLabel} *`} htmlFor="workItemId" error={itemErrors.itemName}>
                     <div ref={workItemDropdownRef} className="relative">
                       <Input
                         id="workItemId"
@@ -2053,7 +2139,7 @@ export function RepairIntakePage() {
                         aria-activedescendant={highlightedWorkItemIndex >= 0 ? `repair-item-option-${highlightedWorkItemIndex}` : undefined}
                         aria-invalid={Boolean(itemErrors.itemName)}
                         error={itemErrors.itemName}
-                        placeholder={workItemOptions.length ? "Type to search repair items" : "No repair items configured for this shop"}
+                        placeholder={workItemOptions.length ? `Type to search ${itemsLabel.toLowerCase()}` : `No ${itemsLabel.toLowerCase()} configured for this shop`}
                         value={workItemSearch}
                         onFocus={() => setIsWorkItemDropdownOpen(true)}
                         onKeyDown={(event) => {
@@ -2106,13 +2192,13 @@ export function RepairIntakePage() {
                               </button>
                             ))
                           ) : (
-                            <p className="px-3 py-3 text-sm text-muted-foreground">No matching repair item.</p>
+                            <p className="px-3 py-3 text-sm text-muted-foreground">No matching {itemLabel.toLowerCase()}.</p>
                           )}
                         </div>
                       ) : null}
                     </div>
                   </FormField>
-                  <FormField label="Category *" htmlFor="itemCategory" error={itemErrors.category}>
+                  <FormField label={`${categoryLabel} *`} htmlFor="itemCategory" error={itemErrors.category}>
                     <Select
                       id="itemCategory"
                       required
@@ -2124,9 +2210,8 @@ export function RepairIntakePage() {
                         setItemErrors((current) => ({ ...current, category: "" }));
                       }}
                     >
-                      <option value="">Select category</option>
-                      <option value="DOMESTIC">Domestic</option>
-                      <option value="INDUSTRIAL">Industrial</option>
+                      <option value="">Select {categoryLabel.toLowerCase()}</option>
+                      {categoryOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                     </Select>
                   </FormField>
                   <FormField label="Quantity" htmlFor="quantity">
@@ -2184,11 +2269,11 @@ export function RepairIntakePage() {
               </div>
 
               <div className="rounded-lg border bg-card p-5 shadow-soft">
-                <h3 className="text-base font-semibold">Items added</h3>
+                <h3 className="text-base font-semibold">{itemsLabel} added</h3>
                 <div className="mt-4 space-y-3">
                   {items.length === 0 ? (
                     <p className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                      No repair items added yet.
+                      No {itemsLabel.toLowerCase()} added yet.
                     </p>
                   ) : (
                     items.map((item) => (
@@ -2290,7 +2375,7 @@ export function RepairIntakePage() {
                       </div>
                       <div className="flex flex-col gap-2 sm:flex-row lg:flex-col">
                         <div className="rounded-md bg-muted px-2 py-1 text-center text-xs text-muted-foreground">
-                          <p>{bill.repairStatus === "COMPLETED" ? "Completed" : "Under repair"}</p>
+                          <p>{bill.repairStatus === "COMPLETED" ? completedLabel : inProgressLabel}</p>
                           {bill.repairStatus === "COMPLETED" && bill.deliveredDate ? (
                             <p className="mt-0.5 font-medium">Delivered: {formatDate(bill.deliveredDate)}</p>
                           ) : bill.printedOn ? (
@@ -2365,7 +2450,7 @@ export function RepairIntakePage() {
                   >
                     <span>
                       <span className="block text-lg font-semibold">Repair item configuration</span>
-                      <span className="block text-sm text-muted-foreground">Add repair items available to this company when creating a bill.</span>
+                      <span className="block text-sm text-muted-foreground">Add {itemsLabel.toLowerCase()} available to this company when creating a bill.</span>
                     </span>
                     {isWorkItemConfigurationOpen
                       ? <ChevronUp className="h-5 w-5 shrink-0" />
@@ -2387,7 +2472,7 @@ export function RepairIntakePage() {
                     </FormField>
                     <div className="flex justify-end">
                       <Button type="submit" isLoading={isSavingWorkItem} leftIcon={<Plus className="h-4 w-4" />}>
-                        Add repair item
+                        Add {itemLabel.toLowerCase()}
                       </Button>
                     </div>
                   </form>
@@ -2397,7 +2482,7 @@ export function RepairIntakePage() {
 
               <div className="rounded-lg border bg-card p-5 shadow-soft">
               <div className="mb-5">
-                <h2 className="text-lg font-semibold">Repair Maintenance</h2>
+                <h2 className="text-lg font-semibold">{maintenanceLabel}</h2>
                 <p className="text-sm text-muted-foreground">Recent company repairs are shown below. Search by bill, repair ID, mobile, or customer.</p>
               </div>
               <form className="flex flex-col gap-3 sm:flex-row" onSubmit={handleMaintenanceSearch}>
@@ -2435,7 +2520,7 @@ export function RepairIntakePage() {
                           <div className="flex gap-2">
                             <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{bill.paymentStatus}</span>
                             <span className="rounded-md bg-secondary px-2 py-1 text-xs text-secondary-foreground">
-                              {bill.repairStatus === "COMPLETED" ? "Completed" : "Under repair"}
+                              {bill.repairStatus === "COMPLETED" ? completedLabel : inProgressLabel}
                             </span>
                           </div>
                         </div>
@@ -2453,7 +2538,7 @@ export function RepairIntakePage() {
                               <div>
                                 <p className="font-medium">{item.itemName}</p>
                                 <p className="text-sm text-muted-foreground">{item.serialNo || item.description || "Repair item"}</p>
-                                <p className="mt-1 text-sm">Technician: {item.technicianNames || "-"}</p>
+                                <p className="mt-1 text-sm">{staffLabel}: {item.technicianNames || "-"}</p>
                               </div>
                               <span className="rounded-md bg-secondary px-2 py-1 text-xs text-secondary-foreground">{item.status}</span>
                             </button>
@@ -2493,17 +2578,17 @@ export function RepairIntakePage() {
                     <div className="mt-4 space-y-4">
                       <div>
                         <p className="font-medium">{selectedRepairItem.itemName}</p>
-                        <p className="text-sm text-muted-foreground">{selectedRepairItem.serialNo || selectedRepairItem.description || "Repair item"}</p>
+                        <p className="text-sm text-muted-foreground">{selectedRepairItem.serialNo || selectedRepairItem.description || itemLabel}</p>
                       </div>
                       {selectedJobCard?.header.status === "DELIVERED" ? (
                         <p className="rounded-md border bg-muted px-3 py-3 text-sm text-muted-foreground">
-                          This repair was delivered and is now read-only. Technician assignment is closed.
+                          This item was delivered and is now read-only. {staffLabel} assignment is closed.
                         </p>
                       ) : (
                       <div className="grid gap-3">
                         <FormField label="Assign / hand off to" htmlFor="assignEmployee">
                           <Select id="assignEmployee" value={selectedEmployeeId} onChange={(event) => setSelectedEmployeeId(event.target.value)}>
-                            <option value="">Select technician</option>
+                            <option value="">Select {staffLabel.toLowerCase()}</option>
                             {employees.map((employee) => (
                               <option key={employee.employeeId} value={employee.employeeId}>
                                 {employee.name}
@@ -2548,7 +2633,7 @@ export function RepairIntakePage() {
                       ) : null}
                     </div>
                   ) : (
-                    <p className="mt-4 text-sm text-muted-foreground">Select a repair item to view or assign its job card.</p>
+                    <p className="mt-4 text-sm text-muted-foreground">Select a {itemLabel.toLowerCase()} to view or assign its {jobCardLabel.toLowerCase()}.</p>
                   )}
                 </aside>
               </div>
@@ -2592,6 +2677,7 @@ export function RepairIntakePage() {
                             <p>Mobile: {company.mobile || "Not provided"}</p>
                             <p>Email: {company.email || "Not provided"}</p>
                             <p>Address: {company.address || "Not provided"}</p>
+                            <p>Website: {company.website || "Not provided"}</p>
                           </div>
                           <Button
                             className="mt-4"
@@ -2601,6 +2687,9 @@ export function RepairIntakePage() {
                             onClick={() => setEmployeeDraft((current) => ({ ...current, companyCode: company.companyCode }))}
                           >
                             Use for employee
+                          </Button>
+                          <Button className="mt-3" type="button" variant="outline" size="sm" onClick={() => editCompanyTerminology(company)}>
+                            Configure labels and categories
                           </Button>
                           <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground">
                             <Upload className="h-4 w-4" />
@@ -2627,6 +2716,26 @@ export function RepairIntakePage() {
                     </p>
                   ) : null}
                 </div>
+              ) : null}
+              {isSystemAdministrator && terminologyDraft ? (
+                <form className="rounded-lg border bg-card p-5 shadow-soft" onSubmit={submitCompanyTerminology}>
+                  <div className="mb-5">
+                    <h2 className="text-lg font-semibold">Labels and categories — {terminologyDraft.companyName}</h2>
+                    <p className="text-sm text-muted-foreground">Leave the defaults unchanged for repair shops. Enter one category per line as CODE|Display label.</p>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <FormField label="Items section label" htmlFor="termsItems"><Input id="termsItems" value={terminologyDraft.itemsLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, itemsLabel: event.target.value } : current)} /></FormField>
+                    <FormField label="Single item label" htmlFor="termsItem"><Input id="termsItem" value={terminologyDraft.itemLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, itemLabel: event.target.value } : current)} /></FormField>
+                    <FormField label="Category field label" htmlFor="termsCategory"><Input id="termsCategory" value={terminologyDraft.categoryLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, categoryLabel: event.target.value } : current)} /></FormField>
+                    <FormField label="Maintenance menu/title" htmlFor="termsMaintenance"><Input id="termsMaintenance" value={terminologyDraft.maintenanceLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, maintenanceLabel: event.target.value } : current)} /></FormField>
+                    <FormField label="Staff role label" htmlFor="termsStaff"><Input id="termsStaff" value={terminologyDraft.staffLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, staffLabel: event.target.value } : current)} /></FormField>
+                    <FormField label="Job card label" htmlFor="termsJobCard"><Input id="termsJobCard" value={terminologyDraft.jobCardLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, jobCardLabel: event.target.value } : current)} /></FormField>
+                    <FormField label="In-progress status label" htmlFor="termsProgress"><Input id="termsProgress" value={terminologyDraft.inProgressLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, inProgressLabel: event.target.value } : current)} /></FormField>
+                    <FormField label="Completed status label" htmlFor="termsCompleted"><Input id="termsCompleted" value={terminologyDraft.completedLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, completedLabel: event.target.value } : current)} /></FormField>
+                    <div className="md:col-span-2"><FormField label="Category options" htmlFor="termsOptions"><Textarea id="termsOptions" rows={5} value={terminologyDraft.categoryOptions} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, categoryOptions: event.target.value } : current)} /></FormField></div>
+                  </div>
+                  <div className="mt-5 flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setTerminologyDraft(null)}>Cancel</Button><Button type="submit" isLoading={isSavingTerminology}>Save labels</Button></div>
+                </form>
               ) : null}
               {isSystemAdministrator ? (
                 <form className="rounded-lg border bg-card p-5 shadow-soft" onSubmit={submitCompany}>
@@ -2658,6 +2767,11 @@ export function RepairIntakePage() {
                     <FormField label="Address" htmlFor="newCompanyAddress">
                       <Input id="newCompanyAddress" value={companyDraft.address} onChange={(event) => setCompanyDraft((current) => ({ ...current, address: event.target.value }))} />
                     </FormField>
+                    <div className="md:col-span-2">
+                      <FormField label="Website (optional)" htmlFor="newCompanyWebsite">
+                        <Input id="newCompanyWebsite" type="url" placeholder="https://example.com" value={companyDraft.website} onChange={(event) => setCompanyDraft((current) => ({ ...current, website: event.target.value }))} />
+                      </FormField>
+                    </div>
                     <label className="flex items-center gap-3 rounded-md border p-3 text-sm md:col-span-2">
                       <input type="checkbox" checked={companyDraft.deliveryGalleryEnabled} onChange={(event) => setCompanyDraft((current) => ({ ...current, deliveryGalleryEnabled: event.target.checked }))} />
                       Enable optional delivery photos and product gallery
@@ -3150,6 +3264,7 @@ export function RepairIntakePage() {
                 invoiceHeaderText={invoiceHeaderText}
                 companyAddress={companyAddress}
                 companyContact={companyContact}
+                companyWebsite={companyWebsite}
                 gstNumber={gstNumber}
                 logoUrl={logoUrl}
                 billNumber={billNumber}
