@@ -913,6 +913,9 @@ export function RepairIntakePage() {
   const [deliveryOtpNotice, setDeliveryOtpNotice] = useState("");
   const [deliveryOtpError, setDeliveryOtpError] = useState("");
   const [deliveryPhotos, setDeliveryPhotos] = useState<ItemPhoto[]>([]);
+  const [deliveryPhotoBill, setDeliveryPhotoBill] = useState<BillSearchResult | null>(null);
+  const [additionalDeliveryPhotos, setAdditionalDeliveryPhotos] = useState<ItemPhoto[]>([]);
+  const [isSavingDeliveryPhotos, setIsSavingDeliveryPhotos] = useState(false);
   const [deliveryGallery, setDeliveryGallery] = useState<DeliveryGalleryEntry[]>([]);
   const [isLoadingGallery, setIsLoadingGallery] = useState(false);
   const [isRequestingDeliveryOtp, setIsRequestingDeliveryOtp] = useState(false);
@@ -1663,6 +1666,24 @@ export function RepairIntakePage() {
     }, 500);
   };
 
+  const saveAdditionalDeliveryPhotos = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!deliveryPhotoBill || additionalDeliveryPhotos.length === 0 || isSavingDeliveryPhotos) return;
+    setIsSavingDeliveryPhotos(true);
+    try {
+      await addDeliveryPhotos(deliveryPhotoBill.billId, additionalDeliveryPhotos);
+      window.alert(`Delivery photos added to ${deliveryPhotoBill.billNumber}.`);
+      setDeliveryPhotoBill(null);
+      setAdditionalDeliveryPhotos([]);
+    } catch (error) {
+      console.error("Unable to save delivery photos.", error);
+      const apiError = error as ApiError;
+      window.alert(apiError.message || "Unable to save delivery photos. Please try again.");
+    } finally {
+      setIsSavingDeliveryPhotos(false);
+    }
+  };
+
   const openDeliveryGallery = async () => {
     setIsMenuOpen(false);
     goTo("deliveryGallery");
@@ -2155,6 +2176,18 @@ export function RepairIntakePage() {
                             isLoading={isRequestingDeliveryOtp && deliveryOtpBill?.billId === bill.billId}
                           >
                             Mark delivered
+                          </Button>
+                        ) : session?.user.company?.deliveryGalleryEnabled ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            leftIcon={<Camera className="h-4 w-4" />}
+                            onClick={() => {
+                              setDeliveryPhotoBill(bill);
+                              setAdditionalDeliveryPhotos([]);
+                            }}
+                          >
+                            Add delivery photos
                           </Button>
                         ) : null}
                       </div>
@@ -2988,6 +3021,68 @@ export function RepairIntakePage() {
                   isLoading={deliveringBillId === deliveryOtpBill.billId}
                 >
                   Verify and mark delivered
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+      {deliveryPhotoBill ? (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="presentation">
+          <div
+            className="w-full max-w-md rounded-lg border bg-card p-5 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delivery-photo-title"
+          >
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h2 id="delivery-photo-title" className="text-lg font-semibold">Add delivery photos</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Add up to five photos for completed bill {deliveryPhotoBill.billNumber}.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Close delivery photo popup"
+                onClick={() => {
+                  setDeliveryPhotoBill(null);
+                  setAdditionalDeliveryPhotos([]);
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <form className="mt-5 space-y-4" onSubmit={saveAdditionalDeliveryPhotos}>
+              <FileUpload
+                label="Choose delivery photos"
+                accept="image/*"
+                capture="environment"
+                multiple
+                maxFileSizeBytes={maxImageSizeBytes}
+                onFilesChange={(files) => {
+                  void Promise.all(files.slice(0, 5).map(fileToPhoto)).then(setAdditionalDeliveryPhotos);
+                }}
+              />
+              <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setDeliveryPhotoBill(null);
+                    setAdditionalDeliveryPhotos([]);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={additionalDeliveryPhotos.length === 0}
+                  isLoading={isSavingDeliveryPhotos}
+                >
+                  Save photos
                 </Button>
               </div>
             </form>
