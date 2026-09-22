@@ -5,9 +5,6 @@ import type { ApiError } from "@/lib/api/api.types";
 
 export const httpClient = axios.create({
   baseURL: env.apiBaseUrl,
-  headers: {
-    "Content-Type": "application/json",
-  },
   timeout: 30000,
 });
 
