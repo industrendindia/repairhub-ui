@@ -1288,14 +1288,14 @@ export function RepairIntakePage() {
       const createdItem = await createWorkItem({ ...workItemDraft, itemName: workItemDraft.itemName.trim() });
       setWorkItemOptions((current) => [...current, createdItem].sort((left, right) => left.itemName.localeCompare(right.itemName)));
       setWorkItemDraft({ itemName: "", category: "DOMESTIC", description: "", defaultPrice: 0, warrantyDays: 0 });
-      window.alert(`Repair item "${createdItem.itemName}" saved successfully.`);
+      window.alert(`${itemLabel} "${createdItem.itemName}" saved successfully.`);
     } catch (error) {
       console.error("Unable to create repair item.", error);
       const apiError = error as ApiError;
       setWorkItemFormError(
         apiError.code === "WORK_ITEM_EXISTS"
-          ? "This repair item already exists."
-          : apiError.message || "Unable to add repair item. Please try again."
+          ? `This ${itemLabel.toLowerCase()} already exists.`
+          : apiError.message || `Unable to add ${itemLabel.toLowerCase()}. Please try again.`
       );
     } finally {
       setIsSavingWorkItem(false);
@@ -1497,7 +1497,7 @@ export function RepairIntakePage() {
       if (updatedItem) setSelectedRepairItem(updatedItem);
     } catch (error) {
       console.error("Unable to assign repair item.", error);
-      window.alert("Unable to assign repair item. Please check the service and try again.");
+      window.alert(`Unable to assign ${itemLabel.toLowerCase()}. Please check the service and try again.`);
     } finally {
       setIsLoadingMaintenance(false);
     }
@@ -2125,7 +2125,7 @@ export function RepairIntakePage() {
             <section className="space-y-5">
               <div className="rounded-lg border bg-card p-5 shadow-soft">
                 <div className="mb-5">
-                  <h2 className="text-lg font-semibold">Repair items</h2>
+                  <h2 className="text-lg font-semibold">{itemsLabel}</h2>
                 </div>
                 <div className="grid gap-4 lg:grid-cols-2">
                   <FormField label={`${itemLabel} *`} htmlFor="workItemId" error={itemErrors.itemName}>
@@ -2449,7 +2449,7 @@ export function RepairIntakePage() {
                     onClick={() => setIsWorkItemConfigurationOpen((current) => !current)}
                   >
                     <span>
-                      <span className="block text-lg font-semibold">Repair item configuration</span>
+                      <span className="block text-lg font-semibold">{itemLabel} configuration</span>
                       <span className="block text-sm text-muted-foreground">Add {itemsLabel.toLowerCase()} available to this company when creating a bill.</span>
                     </span>
                     {isWorkItemConfigurationOpen
@@ -2537,7 +2537,7 @@ export function RepairIntakePage() {
                             >
                               <div>
                                 <p className="font-medium">{item.itemName}</p>
-                                <p className="text-sm text-muted-foreground">{item.serialNo || item.description || "Repair item"}</p>
+                                <p className="text-sm text-muted-foreground">{item.serialNo || item.description || itemLabel}</p>
                                 <p className="mt-1 text-sm">{staffLabel}: {item.technicianNames || "-"}</p>
                               </div>
                               <span className="rounded-md bg-secondary px-2 py-1 text-xs text-secondary-foreground">{item.status}</span>
@@ -3007,7 +3007,7 @@ export function RepairIntakePage() {
                   <div key={item.id} className="flex items-start justify-between gap-4 rounded-md border px-4 py-3">
                     <div>
                       <p className="font-medium">{item.itemName}</p>
-                      <p className="text-sm text-muted-foreground">{item.serialNo || item.description || "Repair item"}</p>
+                      <p className="text-sm text-muted-foreground">{item.serialNo || item.description || itemLabel}</p>
                     </div>
                     {loadedBill ? (
                       <div className="w-36">
