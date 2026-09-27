@@ -170,6 +170,7 @@ type CompanyDetails = {
   completedLabel: string | null;
   cakeOrderFeaturesEnabled: boolean;
   socialMediaEnabled: boolean;
+  cakeOccasionOptions: string | null;
 };
 
 type TerminologyDraft = {
@@ -186,6 +187,7 @@ type TerminologyDraft = {
   completedLabel: string;
   cakeOrderFeaturesEnabled: boolean;
   socialMediaEnabled: boolean;
+  cakeOccasionOptions: string;
 };
 
 type DeliveryGalleryEntry = {
@@ -363,6 +365,17 @@ const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing
 const billingHistoryPageSize = 10;
 const maxImageSizeBytes = 1024 * 1024;
 const maxSignatureSizeBytes = 150 * 1024;
+const defaultCakeOccasions = [
+  "Birthday", "Anniversary", "Wedding", "Engagement", "Baby shower", "Naming ceremony",
+  "Housewarming", "Retirement", "Farewell", "Promotion", "Graduation", "Congratulations",
+  "Thank you", "Get well soon", "Welcome", "Bon voyage", "New job", "New business opening",
+  "Mother's Day", "Father's Day", "Women's Day", "Children's Day", "Teacher's Day",
+  "Valentine's Day", "Friendship Day", "Doctor's Day", "Engineer's Day", "Boss's Day",
+  "Christmas", "New Year", "Diwali", "Holi", "Raksha Bandhan", "Bhai Dooj", "Dussehra",
+  "Navratri", "Ganesh Chaturthi", "Janmashtami", "Makar Sankranti", "Pongal", "Onam",
+  "Eid", "Ramadan", "Guru Nanak Jayanti", "Republic Day", "Independence Day",
+  "World Environment Day", "World Health Day", "International Yoga Day", "Other"
+];
 
 function openSignaturePad(onConfirm: (signature: ItemPhoto) => void) {
   const signatureWindow = window.open("", "repairhub-customer-signature", "popup=yes,width=980,height=720");
@@ -423,7 +436,7 @@ const defaultRepairMeta: RepairMeta = {
   remarks: "",
   deliveryReason: "",
   cardMessage: "",
-  cardMessageLanguage: "English",
+  cardMessageLanguage: "",
   cakePrintName: "",
 };
 
@@ -1120,6 +1133,13 @@ export function RepairIntakePage() {
   const companyWebsite = session?.user.company?.website ?? "";
   const cakeOrderFeaturesEnabled = session?.user.company?.cakeOrderFeaturesEnabled === true;
   const socialMediaEnabled = session?.user.company?.socialMediaEnabled === true;
+  const cakeOccasions = useMemo(() => {
+    const configured = session?.user.company?.cakeOccasionOptions
+      ?.split(/\r?\n/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    return configured?.length ? configured : defaultCakeOccasions;
+  }, [session?.user.company?.cakeOccasionOptions]);
   const itemsLabel = session?.user.company?.itemsLabel?.trim() || "Items";
   const itemLabel = session?.user.company?.itemLabel?.trim() || "Repair item";
   const categoryLabel = session?.user.company?.categoryLabel?.trim() || "Category";
@@ -1604,6 +1624,7 @@ export function RepairIntakePage() {
       completedLabel: company.completedLabel ?? "Completed",
       cakeOrderFeaturesEnabled: company.cakeOrderFeaturesEnabled,
       socialMediaEnabled: company.socialMediaEnabled,
+      cakeOccasionOptions: company.cakeOccasionOptions ?? defaultCakeOccasions.join("\n"),
     });
   };
 
@@ -2111,19 +2132,31 @@ export function RepairIntakePage() {
                       <Input id="anniversaryDate" type="date" value={customer.anniversaryDate} onChange={(event) => setCustomer((current) => ({ ...current, anniversaryDate: event.target.value }))} />
                     </FormField>
                     <FormField label="Reason for delivery / occasion" htmlFor="deliveryReason">
-                      <Input id="deliveryReason" placeholder="Birthday, anniversary, celebration..." value={repairMeta.deliveryReason} onChange={(event) => setRepairMeta((current) => ({ ...current, deliveryReason: event.target.value }))} />
+                      <Input id="deliveryReason" list="cake-occasion-options" placeholder="Type to search or enter another occasion" value={repairMeta.deliveryReason} onChange={(event) => setRepairMeta((current) => ({ ...current, deliveryReason: event.target.value }))} />
                     </FormField>
+                    <datalist id="cake-occasion-options">{cakeOccasions.map((occasion) => <option key={occasion} value={occasion} />)}</datalist>
                     <FormField label="Name to print on cake" htmlFor="cakePrintName">
                       <Input id="cakePrintName" value={repairMeta.cakePrintName} onChange={(event) => setRepairMeta((current) => ({ ...current, cakePrintName: event.target.value }))} />
                     </FormField>
-                    <FormField label="Card message language" htmlFor="cardMessageLanguage">
-                      <Input id="cardMessageLanguage" list="card-message-languages" value={repairMeta.cardMessageLanguage} onChange={(event) => setRepairMeta((current) => ({ ...current, cardMessageLanguage: event.target.value }))} />
-                    </FormField>
-                    <datalist id="card-message-languages"><option value="English" /><option value="Hindi" /><option value="Marathi" /><option value="Gujarati" /><option value="Tamil" /><option value="Telugu" /><option value="Kannada" /><option value="Bengali" /></datalist>
                     <div className="md:col-span-2">
                       <FormField label="Message on card" htmlFor="cardMessage">
                         <Textarea id="cardMessage" rows={3} placeholder="Unicode text is supported in any language" value={repairMeta.cardMessage} onChange={(event) => setRepairMeta((current) => ({ ...current, cardMessage: event.target.value }))} />
                       </FormField>
+                    </div>
+                    <div className="md:col-span-2">
+                      <FileUpload
+                        label="Capture or upload cake print/reference photos"
+                        accept="image/*"
+                        capture="environment"
+                        multiple
+                        maxFileSizeBytes={maxImageSizeBytes}
+                        onFilesChange={(files) => {
+                          void Promise.all(files.slice(0, 5).map(fileToPhoto)).then((photos) =>
+                            setDraftItem((current) => ({ ...current, photos })),
+                          );
+                        }}
+                      />
+                      <p className="mt-2 text-xs text-muted-foreground">Up to five photos. They will stay attached to the cake item and appear in Cake Order Status and the Job Card.</p>
                     </div>
                   </>
                 ) : null}
@@ -2810,6 +2843,7 @@ export function RepairIntakePage() {
                     <FormField label="In-progress status label" htmlFor="termsProgress"><Input id="termsProgress" value={terminologyDraft.inProgressLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, inProgressLabel: event.target.value } : current)} /></FormField>
                     <FormField label="Completed status label" htmlFor="termsCompleted"><Input id="termsCompleted" value={terminologyDraft.completedLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, completedLabel: event.target.value } : current)} /></FormField>
                     <div className="md:col-span-2"><FormField label="Category options" htmlFor="termsOptions"><Textarea id="termsOptions" rows={5} value={terminologyDraft.categoryOptions} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, categoryOptions: event.target.value } : current)} /></FormField></div>
+                    {terminologyDraft.cakeOrderFeaturesEnabled ? <div className="md:col-span-2"><FormField label="Cake occasion options" htmlFor="termsCakeOccasions"><Textarea id="termsCakeOccasions" rows={8} value={terminologyDraft.cakeOccasionOptions} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, cakeOccasionOptions: event.target.value } : current)} /><p className="mt-1 text-xs text-muted-foreground">One searchable suggestion per line. Shop users can still type an occasion that is not listed.</p></FormField></div> : null}
                     <label className="flex items-center gap-3 rounded-md border p-3 text-sm md:col-span-2"><input type="checkbox" checked={terminologyDraft.cakeOrderFeaturesEnabled} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, cakeOrderFeaturesEnabled: event.target.checked } : current)} />Enable cake-order fields and Cake Order Status</label>
                     <label className="flex items-center gap-3 rounded-md border p-3 text-sm md:col-span-2"><input type="checkbox" checked={terminologyDraft.socialMediaEnabled} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, socialMediaEnabled: event.target.checked } : current)} />Enable Social Media menu</label>
                   </div>

@@ -25,6 +25,7 @@ export type AuthUser = {
     completedLabel?: string | null;
     cakeOrderFeaturesEnabled?: boolean;
     socialMediaEnabled?: boolean;
+    cakeOccasionOptions?: string | null;
   };
 };
 
