@@ -2147,7 +2147,6 @@ export function RepairIntakePage() {
                       <FileUpload
                         label="Capture or upload cake print/reference photos"
                         accept="image/*"
-                        capture="environment"
                         multiple
                         maxFileSizeBytes={maxImageSizeBytes}
                         onFilesChange={(files) => {
@@ -2338,7 +2337,6 @@ export function RepairIntakePage() {
                     <FileUpload
                       label={cakeOrderFeaturesEnabled ? "Capture or upload cake print/reference photos" : "Capture or upload item photo"}
                       accept="image/*"
-                      capture="environment"
                       multiple
                       maxFileSizeBytes={maxImageSizeBytes}
                       onFilesChange={(files) => {
@@ -3483,7 +3481,7 @@ export function RepairIntakePage() {
               </FormField>
               {deliveryOtpNotice ? <p className="text-sm text-muted-foreground">{deliveryOtpNotice}</p> : null}
               {session?.user.company?.deliveryGalleryEnabled ? (
-                <FileUpload label="Add delivery photos (optional)" accept="image/*" capture="environment" multiple maxFileSizeBytes={maxImageSizeBytes} onFilesChange={(files) => { void Promise.all(files.slice(0, 5).map(fileToPhoto)).then(setDeliveryPhotos); }} />
+                <FileUpload label="Add delivery photos (optional)" accept="image/*" multiple maxFileSizeBytes={maxImageSizeBytes} onFilesChange={(files) => { void Promise.all(files.slice(0, 5).map(fileToPhoto)).then(setDeliveryPhotos); }} />
               ) : null}
               <p className="text-xs text-muted-foreground">If the customer cannot receive the message, the shop fallback OTP is 987600.</p>
               <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
@@ -3540,7 +3538,6 @@ export function RepairIntakePage() {
               <FileUpload
                 label="Choose delivery photos"
                 accept="image/*"
-                capture="environment"
                 multiple
                 maxFileSizeBytes={maxImageSizeBytes}
                 onFilesChange={(files) => {
