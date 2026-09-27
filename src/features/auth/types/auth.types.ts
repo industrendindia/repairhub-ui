@@ -23,6 +23,8 @@ export type AuthUser = {
     jobCardLabel?: string | null;
     inProgressLabel?: string | null;
     completedLabel?: string | null;
+    cakeOrderFeaturesEnabled?: boolean;
+    socialMediaEnabled?: boolean;
   };
 };
 

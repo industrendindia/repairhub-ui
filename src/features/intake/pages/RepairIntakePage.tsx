@@ -12,7 +12,7 @@ import { Input } from "@/shared/components/ui/Input";
 import { Select } from "@/shared/components/ui/Select";
 import { Textarea } from "@/shared/components/ui/Textarea";
 
-type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "billingHistory" | "repairMaintenance" | "employees" | "deliveryGallery" | "whatsappConfiguration";
+type IntakeStep = "customer" | "items" | "billing" | "payment" | "final" | "billingHistory" | "repairMaintenance" | "employees" | "deliveryGallery" | "whatsappConfiguration" | "socialMedia";
 
 type CustomerDetails = {
   customerName: string;
@@ -21,6 +21,8 @@ type CustomerDetails = {
   email: string;
   address: string;
   notes: string;
+  dateOfBirth: string;
+  anniversaryDate: string;
   signature: ItemPhoto | null;
 };
 
@@ -166,6 +168,8 @@ type CompanyDetails = {
   jobCardLabel: string | null;
   inProgressLabel: string | null;
   completedLabel: string | null;
+  cakeOrderFeaturesEnabled: boolean;
+  socialMediaEnabled: boolean;
 };
 
 type TerminologyDraft = {
@@ -180,6 +184,8 @@ type TerminologyDraft = {
   jobCardLabel: string;
   inProgressLabel: string;
   completedLabel: string;
+  cakeOrderFeaturesEnabled: boolean;
+  socialMediaEnabled: boolean;
 };
 
 type DeliveryGalleryEntry = {
@@ -254,6 +260,7 @@ type MaintenanceRepairItem = {
   description: string;
   status: string;
   technicianNames: string;
+  photoUrl: string | null;
 };
 
 type MaintenanceBill = {
@@ -266,6 +273,10 @@ type MaintenanceBill = {
   balance: number;
   paymentStatus: string;
   repairStatus: string;
+  deliveryReason: string | null;
+  cardMessage: string | null;
+  cardMessageLanguage: string | null;
+  cakePrintName: string | null;
   items: MaintenanceRepairItem[];
 };
 
@@ -279,6 +290,11 @@ type JobCard = {
     serialNo: string;
     description: string;
     status: string;
+    photoUrl: string | null;
+    deliveryReason: string | null;
+    cardMessage: string | null;
+    cardMessageLanguage: string | null;
+    cakePrintName: string | null;
   };
   assignments: Array<{
     assignmentId: number;
@@ -313,6 +329,10 @@ type RepairMeta = {
   expectedDelivery: string;
   priority: string;
   remarks: string;
+  deliveryReason: string;
+  cardMessage: string;
+  cardMessageLanguage: string;
+  cakePrintName: string;
 };
 
 type IntakeDraft = {
@@ -337,9 +357,9 @@ const steps: Array<{ key: IntakeStep; label: string }> = [
 ];
 
 const workflowSteps = steps.filter((entry) => entry.key !== "billingHistory");
-const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory", "repairMaintenance", "employees", "deliveryGallery", "whatsappConfiguration"];
+const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingHistory", "repairMaintenance", "employees", "deliveryGallery", "whatsappConfiguration", "socialMedia"];
 
-const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing History", "Product Gallery", "WhatsApp Configuration"];
+const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing History", "Product Gallery", "Social Media", "WhatsApp Configuration"];
 const billingHistoryPageSize = 10;
 const maxImageSizeBytes = 1024 * 1024;
 const maxSignatureSizeBytes = 150 * 1024;
@@ -392,6 +412,8 @@ const defaultCustomer: CustomerDetails = {
   email: "",
   address: "",
   notes: "",
+  dateOfBirth: "",
+  anniversaryDate: "",
   signature: null,
 };
 
@@ -399,6 +421,10 @@ const defaultRepairMeta: RepairMeta = {
   expectedDelivery: "",
   priority: "NORMAL",
   remarks: "",
+  deliveryReason: "",
+  cardMessage: "",
+  cardMessageLanguage: "English",
+  cakePrintName: "",
 };
 
 const defaultDraftItem: RepairItem = {
@@ -648,7 +674,7 @@ async function deactivateManagedEmployee(employeeId: number) {
   return response.data;
 }
 
-async function createCompany(company: { companyCode: string; name: string; invoiceHeaderText: string; gstNumber: string; mobile: string; email: string; address: string; website: string; deliveryGalleryEnabled: boolean }) {
+async function createCompany(company: { companyCode: string; name: string; invoiceHeaderText: string; gstNumber: string; mobile: string; email: string; address: string; website: string; deliveryGalleryEnabled: boolean; cakeOrderFeaturesEnabled: boolean; socialMediaEnabled: boolean }) {
   await httpClient.post("/companies", company);
 }
 
@@ -1028,7 +1054,7 @@ export function RepairIntakePage() {
   const [isSearchingCompanies, setIsSearchingCompanies] = useState(false);
   const [uploadingLogoCompanyCode, setUploadingLogoCompanyCode] = useState<string | null>(null);
   const [hasSearchedCompanies, setHasSearchedCompanies] = useState(false);
-  const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", website: "", deliveryGalleryEnabled: false });
+  const [companyDraft, setCompanyDraft] = useState({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", website: "", deliveryGalleryEnabled: false, cakeOrderFeaturesEnabled: false, socialMediaEnabled: false });
   const [companyLogo, setCompanyLogo] = useState<File | null>(null);
   const [terminologyDraft, setTerminologyDraft] = useState<TerminologyDraft | null>(null);
   const [isSavingTerminology, setIsSavingTerminology] = useState(false);
@@ -1092,10 +1118,12 @@ export function RepairIntakePage() {
   const invoiceHeaderText = session?.user.company?.invoiceHeaderText ?? null;
   const companyAddress = session?.user.company?.address ?? "";
   const companyWebsite = session?.user.company?.website ?? "";
+  const cakeOrderFeaturesEnabled = session?.user.company?.cakeOrderFeaturesEnabled === true;
+  const socialMediaEnabled = session?.user.company?.socialMediaEnabled === true;
   const itemsLabel = session?.user.company?.itemsLabel?.trim() || "Items";
   const itemLabel = session?.user.company?.itemLabel?.trim() || "Repair item";
   const categoryLabel = session?.user.company?.categoryLabel?.trim() || "Category";
-  const maintenanceLabel = session?.user.company?.maintenanceLabel?.trim() || "Repair Maintenance";
+  const maintenanceLabel = cakeOrderFeaturesEnabled ? "Cake Order Status" : session?.user.company?.maintenanceLabel?.trim() || "Repair Maintenance";
   const staffLabel = session?.user.company?.staffLabel?.trim() || "Technician";
   const jobCardLabel = session?.user.company?.jobCardLabel?.trim() || "Job Card";
   const inProgressLabel = session?.user.company?.inProgressLabel?.trim() || "Under repair";
@@ -1375,7 +1403,7 @@ export function RepairIntakePage() {
         }
       }
       setEmployeeDraft((current) => ({ ...current, companyCode: createdCompanyCode }));
-      setCompanyDraft({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", website: "", deliveryGalleryEnabled: false });
+      setCompanyDraft({ companyCode: "", name: "", invoiceHeaderText: "", gstNumber: "", mobile: "", email: "", address: "", website: "", deliveryGalleryEnabled: false, cakeOrderFeaturesEnabled: false, socialMediaEnabled: false });
       setCompanyLogo(null);
       window.alert(
         logoUploadFailed
@@ -1574,6 +1602,8 @@ export function RepairIntakePage() {
       jobCardLabel: company.jobCardLabel ?? "Job Card",
       inProgressLabel: company.inProgressLabel ?? "Under repair",
       completedLabel: company.completedLabel ?? "Completed",
+      cakeOrderFeaturesEnabled: company.cakeOrderFeaturesEnabled,
+      socialMediaEnabled: company.socialMediaEnabled,
     });
   };
 
@@ -1948,6 +1978,7 @@ export function RepairIntakePage() {
                     {navigationMenuItems
                       .filter((item) => item !== "Employees" || canManageEmployees)
                       .filter((item) => item !== "Product Gallery" || session?.user.company?.deliveryGalleryEnabled)
+                      .filter((item) => item !== "Social Media" || socialMediaEnabled)
                       .filter((item) => item !== "WhatsApp Configuration" || isSystemAdministrator)
                       .map((item) => (
                       <button
@@ -1968,6 +1999,8 @@ export function RepairIntakePage() {
                             void openDeliveryGallery();
                           } else if (item === "WhatsApp Configuration") {
                             void loadWhatsappConfigurations();
+                          } else if (item === "Social Media") {
+                            goTo("socialMedia");
                           }
                         }}
                       >
@@ -2069,6 +2102,31 @@ export function RepairIntakePage() {
                     onChange={(event) => setCustomer((current) => ({ ...current, email: event.target.value }))}
                   />
                 </FormField>
+                {cakeOrderFeaturesEnabled ? (
+                  <>
+                    <FormField label="Date of birth" htmlFor="dateOfBirth">
+                      <Input id="dateOfBirth" type="date" value={customer.dateOfBirth} onChange={(event) => setCustomer((current) => ({ ...current, dateOfBirth: event.target.value }))} />
+                    </FormField>
+                    <FormField label="Anniversary" htmlFor="anniversaryDate">
+                      <Input id="anniversaryDate" type="date" value={customer.anniversaryDate} onChange={(event) => setCustomer((current) => ({ ...current, anniversaryDate: event.target.value }))} />
+                    </FormField>
+                    <FormField label="Reason for delivery / occasion" htmlFor="deliveryReason">
+                      <Input id="deliveryReason" placeholder="Birthday, anniversary, celebration..." value={repairMeta.deliveryReason} onChange={(event) => setRepairMeta((current) => ({ ...current, deliveryReason: event.target.value }))} />
+                    </FormField>
+                    <FormField label="Name to print on cake" htmlFor="cakePrintName">
+                      <Input id="cakePrintName" value={repairMeta.cakePrintName} onChange={(event) => setRepairMeta((current) => ({ ...current, cakePrintName: event.target.value }))} />
+                    </FormField>
+                    <FormField label="Card message language" htmlFor="cardMessageLanguage">
+                      <Input id="cardMessageLanguage" list="card-message-languages" value={repairMeta.cardMessageLanguage} onChange={(event) => setRepairMeta((current) => ({ ...current, cardMessageLanguage: event.target.value }))} />
+                    </FormField>
+                    <datalist id="card-message-languages"><option value="English" /><option value="Hindi" /><option value="Marathi" /><option value="Gujarati" /><option value="Tamil" /><option value="Telugu" /><option value="Kannada" /><option value="Bengali" /></datalist>
+                    <div className="md:col-span-2">
+                      <FormField label="Message on card" htmlFor="cardMessage">
+                        <Textarea id="cardMessage" rows={3} placeholder="Unicode text is supported in any language" value={repairMeta.cardMessage} onChange={(event) => setRepairMeta((current) => ({ ...current, cardMessage: event.target.value }))} />
+                      </FormField>
+                    </div>
+                  </>
+                ) : null}
                 <div className="flex flex-wrap items-center gap-3 md:col-span-2">
                   <input
                     ref={signatureInputRef}
@@ -2245,7 +2303,7 @@ export function RepairIntakePage() {
                   </FormField>
                   <div className="lg:col-span-2">
                     <FileUpload
-                      label="Capture or upload item photo"
+                      label={cakeOrderFeaturesEnabled ? "Capture or upload cake print/reference photos" : "Capture or upload item photo"}
                       accept="image/*"
                       capture="environment"
                       multiple
@@ -2525,6 +2583,13 @@ export function RepairIntakePage() {
                           </div>
                         </div>
                         <div className="mt-4 space-y-3">
+                          {cakeOrderFeaturesEnabled && (bill.deliveryReason || bill.cakePrintName || bill.cardMessage) ? (
+                            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                              {bill.deliveryReason ? <div className="rounded-md border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Occasion / reason</p><p className="mt-1 font-medium">{bill.deliveryReason}</p></div> : null}
+                              {bill.cakePrintName ? <div className="rounded-md border bg-muted/30 p-3"><p className="text-xs text-muted-foreground">Name on cake</p><p className="mt-1 font-medium">{bill.cakePrintName}</p></div> : null}
+                              {bill.cardMessage ? <div className="rounded-md border bg-muted/30 p-3 sm:col-span-2 lg:col-span-1"><p className="text-xs text-muted-foreground">Card message{bill.cardMessageLanguage ? ` · ${bill.cardMessageLanguage}` : ""}</p><p className="mt-1 whitespace-pre-wrap font-medium">{bill.cardMessage}</p></div> : null}
+                            </div>
+                          ) : null}
                           {bill.items.map((item) => (
                             <button
                               key={item.repairItemId}
@@ -2535,10 +2600,13 @@ export function RepairIntakePage() {
                               ].join(" ")}
                               onClick={() => void openJobCard(item)}
                             >
-                              <div>
+                              <div className="flex items-start gap-3">
+                                {cakeOrderFeaturesEnabled && item.photoUrl ? <img src={item.photoUrl} alt={`${item.itemName} reference`} className="h-20 w-20 shrink-0 rounded-md border object-cover" loading="lazy" /> : null}
+                                <div>
                                 <p className="font-medium">{item.itemName}</p>
                                 <p className="text-sm text-muted-foreground">{item.serialNo || item.description || itemLabel}</p>
                                 <p className="mt-1 text-sm">{staffLabel}: {item.technicianNames || "-"}</p>
+                                </div>
                               </div>
                               <span className="rounded-md bg-secondary px-2 py-1 text-xs text-secondary-foreground">{item.status}</span>
                             </button>
@@ -2573,13 +2641,22 @@ export function RepairIntakePage() {
                 </div>
 
                 <aside className="h-fit rounded-md border p-4">
-                  <h3 className="text-base font-semibold">Job card</h3>
+                  <h3 className="text-base font-semibold">{jobCardLabel}</h3>
                   {selectedRepairItem ? (
                     <div className="mt-4 space-y-4">
                       <div>
+                        {cakeOrderFeaturesEnabled && selectedJobCard?.header.photoUrl ? <img src={selectedJobCard.header.photoUrl} alt={`${selectedRepairItem.itemName} print reference`} className="mb-3 aspect-video w-full rounded-md border object-cover" /> : null}
                         <p className="font-medium">{selectedRepairItem.itemName}</p>
                         <p className="text-sm text-muted-foreground">{selectedRepairItem.serialNo || selectedRepairItem.description || itemLabel}</p>
                       </div>
+                      {cakeOrderFeaturesEnabled && selectedJobCard ? (
+                        <div className="grid gap-2">
+                          {selectedJobCard.header.deliveryReason ? <div className="rounded-md border p-3"><p className="text-xs text-muted-foreground">Occasion / reason</p><p className="mt-1 font-medium">{selectedJobCard.header.deliveryReason}</p></div> : null}
+                          {selectedJobCard.header.cakePrintName ? <div className="rounded-md border p-3"><p className="text-xs text-muted-foreground">Name on cake</p><p className="mt-1 font-medium">{selectedJobCard.header.cakePrintName}</p></div> : null}
+                          {selectedJobCard.header.cardMessage ? <div className="rounded-md border p-3"><p className="text-xs text-muted-foreground">Card message{selectedJobCard.header.cardMessageLanguage ? ` · ${selectedJobCard.header.cardMessageLanguage}` : ""}</p><p className="mt-1 whitespace-pre-wrap font-medium">{selectedJobCard.header.cardMessage}</p></div> : null}
+                          {selectedJobCard.attachments.length ? <div className="grid grid-cols-2 gap-2">{selectedJobCard.attachments.map((attachment) => <a key={attachment.attachmentId} href={attachment.filePath} target="_blank" rel="noreferrer"><img src={attachment.filePath} alt={attachment.fileName} className="aspect-square w-full rounded-md border object-cover" loading="lazy" /></a>)}</div> : null}
+                        </div>
+                      ) : null}
                       {selectedJobCard?.header.status === "DELIVERED" ? (
                         <p className="rounded-md border bg-muted px-3 py-3 text-sm text-muted-foreground">
                           This item was delivered and is now read-only. {staffLabel} assignment is closed.
@@ -2733,6 +2810,8 @@ export function RepairIntakePage() {
                     <FormField label="In-progress status label" htmlFor="termsProgress"><Input id="termsProgress" value={terminologyDraft.inProgressLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, inProgressLabel: event.target.value } : current)} /></FormField>
                     <FormField label="Completed status label" htmlFor="termsCompleted"><Input id="termsCompleted" value={terminologyDraft.completedLabel} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, completedLabel: event.target.value } : current)} /></FormField>
                     <div className="md:col-span-2"><FormField label="Category options" htmlFor="termsOptions"><Textarea id="termsOptions" rows={5} value={terminologyDraft.categoryOptions} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, categoryOptions: event.target.value } : current)} /></FormField></div>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm md:col-span-2"><input type="checkbox" checked={terminologyDraft.cakeOrderFeaturesEnabled} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, cakeOrderFeaturesEnabled: event.target.checked } : current)} />Enable cake-order fields and Cake Order Status</label>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm md:col-span-2"><input type="checkbox" checked={terminologyDraft.socialMediaEnabled} onChange={(event) => setTerminologyDraft((current) => current ? { ...current, socialMediaEnabled: event.target.checked } : current)} />Enable Social Media menu</label>
                   </div>
                   <div className="mt-5 flex justify-end gap-3"><Button type="button" variant="outline" onClick={() => setTerminologyDraft(null)}>Cancel</Button><Button type="submit" isLoading={isSavingTerminology}>Save labels</Button></div>
                 </form>
@@ -2775,6 +2854,14 @@ export function RepairIntakePage() {
                     <label className="flex items-center gap-3 rounded-md border p-3 text-sm md:col-span-2">
                       <input type="checkbox" checked={companyDraft.deliveryGalleryEnabled} onChange={(event) => setCompanyDraft((current) => ({ ...current, deliveryGalleryEnabled: event.target.checked }))} />
                       Enable optional delivery photos and product gallery
+                    </label>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm md:col-span-2">
+                      <input type="checkbox" checked={companyDraft.cakeOrderFeaturesEnabled} onChange={(event) => setCompanyDraft((current) => ({ ...current, cakeOrderFeaturesEnabled: event.target.checked }))} />
+                      Enable cake-order details, print photos, and Cake Order Status
+                    </label>
+                    <label className="flex items-center gap-3 rounded-md border p-3 text-sm md:col-span-2">
+                      <input type="checkbox" checked={companyDraft.socialMediaEnabled} onChange={(event) => setCompanyDraft((current) => ({ ...current, socialMediaEnabled: event.target.checked }))} />
+                      Enable Social Media menu for future Facebook and Instagram support
                     </label>
                     <div className="md:col-span-2">
                       <FileUpload
@@ -3225,7 +3312,7 @@ export function RepairIntakePage() {
                       <Input id="whatsappTemplateLanguage" value={whatsappConfigurationDraft.templateLanguage} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, templateLanguage: event.target.value } : current)} />
                     </FormField>
                     <div className="md:col-span-2"><FormField label="Bill template namespace" htmlFor="whatsappTemplateNamespace"><Input id="whatsappTemplateNamespace" required={whatsappConfigurationDraft.active} value={whatsappConfigurationDraft.templateNamespace} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, templateNamespace: event.target.value } : current)} /></FormField></div>
-                    <div className="md:col-span-2"><FormField label="Bill template component mapping (JSON)" htmlFor="whatsappTemplateComponents"><Textarea id="whatsappTemplateComponents" rows={4} placeholder='{"body_1":"CUSTOMER_NAME","body_2":"BILL_NUMBER"}' value={whatsappConfigurationDraft.templateComponents} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, templateComponents: event.target.value } : current)} /></FormField></div>
+                    <div className="md:col-span-2"><FormField label="Bill template component mapping (comma-separated key=value pairs)" htmlFor="whatsappTemplateComponents"><Textarea id="whatsappTemplateComponents" rows={4} placeholder="body_1=CUSTOMER_NAME,body_2=BILL_NUMBER,document_1=BILL_PDF" value={whatsappConfigurationDraft.templateComponents} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, templateComponents: event.target.value } : current)} /></FormField></div>
                     <FormField label="Delivery OTP template name" htmlFor="whatsappOtpTemplateName"><Input id="whatsappOtpTemplateName" required={whatsappConfigurationDraft.active} value={whatsappConfigurationDraft.otpTemplateName} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, otpTemplateName: event.target.value } : current)} /></FormField>
                     <FormField label="Delivery OTP language" htmlFor="whatsappOtpTemplateLanguage"><Input id="whatsappOtpTemplateLanguage" value={whatsappConfigurationDraft.otpTemplateLanguage} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, otpTemplateLanguage: event.target.value } : current)} /></FormField>
                     <div className="md:col-span-2"><FormField label="Delivery OTP template namespace" htmlFor="whatsappOtpTemplateNamespace"><Input id="whatsappOtpTemplateNamespace" required={whatsappConfigurationDraft.active} value={whatsappConfigurationDraft.otpTemplateNamespace} onChange={(event) => setWhatsappConfigurationDraft((current) => current ? { ...current, otpTemplateNamespace: event.target.value } : current)} /></FormField></div>
@@ -3237,6 +3324,17 @@ export function RepairIntakePage() {
                   </div>
                 </form>
               ) : null}
+            </section>
+          ) : null}
+
+          {step === "socialMedia" && socialMediaEnabled ? (
+            <section className="rounded-lg border bg-card p-5 shadow-soft">
+              <h2 className="text-lg font-semibold">Social Media</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Facebook and Instagram publishing will be available here when those integrations are configured.</p>
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-lg border p-4"><p className="font-semibold">Facebook</p><p className="mt-1 text-sm text-muted-foreground">Not connected yet</p></div>
+                <div className="rounded-lg border p-4"><p className="font-semibold">Instagram</p><p className="mt-1 text-sm text-muted-foreground">Not connected yet</p></div>
+              </div>
             </section>
           ) : null}
 
@@ -3280,7 +3378,7 @@ export function RepairIntakePage() {
           ) : null}
         </section>
 
-        {step !== "employees" && step !== "deliveryGallery" && step !== "whatsappConfiguration" ? (
+        {step !== "employees" && step !== "deliveryGallery" && step !== "whatsappConfiguration" && step !== "socialMedia" ? (
         <aside className="no-print h-fit rounded-lg border bg-card p-5 shadow-soft xl:sticky xl:top-6">
           <h2 className="text-base font-semibold">Bill summary</h2>
           <div className="mt-4 space-y-3 text-sm">
