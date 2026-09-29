@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, Camera, CheckCircle2, ChevronDown, ChevronUp, Home, LogOut, Menu, MessageCircle, PenLine, Plus, Printer, Trash2, Upload, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Camera, CheckCircle2, ChevronDown, ChevronUp, Home, LogOut, Menu, MessageCircle, PenLine, Plus, Printer, Star, Trash2, Upload, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 import { useAuth } from "@/features/auth/hooks/useAuth";
@@ -196,6 +196,7 @@ type DeliveryGalleryEntry = {
   billNumber: string;
   customerName: string;
   deliveredOn: string | null;
+  favorite: boolean;
 };
 
 type DeliveryGalleryPage = {
@@ -637,9 +638,13 @@ async function addDeliveryPhotos(billId: number, photos: ItemPhoto[]) {
 
 async function getDeliveryGallery(page: number) {
   const response = await httpClient.get<DeliveryGalleryPage>("/delivery-gallery", {
-    params: { page: page - 1, size: 24 },
+    params: { page: page - 1, size: 5 },
   });
   return response.data;
+}
+
+async function setDeliveryPhotoFavorite(photoId: number, favorite: boolean) {
+  await httpClient.put(`/delivery-gallery/${photoId}/favorite`, { favorite });
 }
 
 async function updateBillAmounts(billId: number, items: RepairItem[], billing: BillingDetails) {
@@ -1033,6 +1038,7 @@ export function RepairIntakePage() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigationMenuRef = useRef<HTMLDivElement | null>(null);
   const workItemDropdownRef = useRef<HTMLDivElement | null>(null);
+  const jobCardRef = useRef<HTMLElement | null>(null);
   const signatureInputRef = useRef<HTMLInputElement | null>(null);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isSendingWhatsapp, setIsSendingWhatsapp] = useState(false);
@@ -1052,6 +1058,7 @@ export function RepairIntakePage() {
   const [deliveryGalleryPageCount, setDeliveryGalleryPageCount] = useState(0);
   const [deliveryGalleryTotal, setDeliveryGalleryTotal] = useState(0);
   const [isLoadingGallery, setIsLoadingGallery] = useState(false);
+  const [favoritePhotoId, setFavoritePhotoId] = useState<number | null>(null);
   const [isRequestingDeliveryOtp, setIsRequestingDeliveryOtp] = useState(false);
   const [billSearchQuery, setBillSearchQuery] = useState("");
   const [billSearchResults, setBillSearchResults] = useState<BillSearchResult[]>([]);
@@ -1059,6 +1066,7 @@ export function RepairIntakePage() {
   const [maintenanceSearchQuery, setMaintenanceSearchQuery] = useState("");
   const [maintenanceBills, setMaintenanceBills] = useState<MaintenanceBill[]>([]);
   const [maintenancePage, setMaintenancePage] = useState(1);
+  const [isMobileMaintenance, setIsMobileMaintenance] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [managedEmployees, setManagedEmployees] = useState<ManagedEmployee[]>([]);
   const [employeeSearch, setEmployeeSearch] = useState("");
@@ -1172,16 +1180,27 @@ export function RepairIntakePage() {
     (billingHistoryPage - 1) * billingHistoryPageSize,
     billingHistoryPage * billingHistoryPageSize
   );
-  const maintenancePageCount = Math.max(Math.ceil(maintenanceBills.length / billingHistoryPageSize), 1);
+  const maintenancePageSize = isMobileMaintenance ? 2 : 5;
+  const maintenancePageCount = Math.max(Math.ceil(maintenanceBills.length / maintenancePageSize), 1);
   const pagedMaintenanceBills = maintenanceBills.slice(
-    (maintenancePage - 1) * billingHistoryPageSize,
-    maintenancePage * billingHistoryPageSize
+    (maintenancePage - 1) * maintenancePageSize,
+    maintenancePage * maintenancePageSize
   );
   const filteredWorkItemOptions = useMemo(() => {
     const query = workItemSearch.trim().toLowerCase();
     if (!query) return workItemOptions;
     return workItemOptions.filter((item) => item.itemName.toLowerCase().includes(query));
   }, [workItemOptions, workItemSearch]);
+
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 639px)");
+    const updateLayout = () => {
+      setIsMobileMaintenance(query.matches);
+      setMaintenancePage(1);
+    };
+    query.addEventListener("change", updateLayout);
+    return () => query.removeEventListener("change", updateLayout);
+  }, []);
 
   useEffect(() => {
     if (!isWorkItemDropdownOpen) {
@@ -1517,6 +1536,9 @@ export function RepairIntakePage() {
 
   const openJobCard = async (item: MaintenanceRepairItem) => {
     setSelectedRepairItem(item);
+    if (window.matchMedia("(max-width: 639px)").matches) {
+      window.setTimeout(() => jobCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+    }
     setIsLoadingMaintenance(true);
     try {
       setSelectedJobCard(await getJobCard(item.repairItemId));
@@ -1909,6 +1931,20 @@ export function RepairIntakePage() {
       setDeliveryGalleryTotal(0);
     } finally {
       setIsLoadingGallery(false);
+    }
+  };
+
+  const toggleGalleryFavorite = async (entry: DeliveryGalleryEntry) => {
+    if (favoritePhotoId !== null) return;
+    setFavoritePhotoId(entry.deliveryPhotoId);
+    try {
+      await setDeliveryPhotoFavorite(entry.deliveryPhotoId, !entry.favorite);
+      await openDeliveryGallery(deliveryGalleryPage);
+    } catch (error) {
+      console.error("Unable to update gallery favorite.", error);
+      window.alert("Unable to update the favorite. Please try again.");
+    } finally {
+      setFavoritePhotoId(null);
     }
   };
 
@@ -2646,7 +2682,7 @@ export function RepairIntakePage() {
                       </div>
                     ))
                   )}
-                  {maintenanceBills.length > billingHistoryPageSize ? (
+                  {maintenanceBills.length > maintenancePageSize ? (
                     <div className="flex items-center justify-between gap-3 pt-1">
                       <Button
                         type="button"
@@ -2671,7 +2707,7 @@ export function RepairIntakePage() {
                   ) : null}
                 </div>
 
-                <aside className="h-fit rounded-md border p-4">
+                <aside ref={jobCardRef} className="h-fit scroll-mt-4 rounded-md border p-4">
                   <h3 className="text-base font-semibold">{jobCardLabel}</h3>
                   {selectedRepairItem ? (
                     <div className="mt-4 space-y-4">
@@ -3246,10 +3282,20 @@ export function RepairIntakePage() {
               </div>
               {isLoadingGallery ? <p className="py-10 text-center text-sm text-muted-foreground">Loading gallery...</p>
                 : deliveryGallery.length ? (
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                  <div className="flex snap-x snap-mandatory gap-3 overflow-x-auto pb-3 sm:grid sm:grid-cols-3 sm:overflow-visible sm:pb-0 lg:grid-cols-5">
                     {deliveryGallery.map((entry) => (
-                      <figure key={entry.deliveryPhotoId} className="overflow-hidden rounded-lg border bg-background">
+                      <figure key={entry.deliveryPhotoId} className="relative w-[82%] shrink-0 snap-center overflow-hidden rounded-lg border bg-background sm:w-auto">
                         <a href={entry.photoUrl} target="_blank" rel="noreferrer"><img src={entry.photoUrl} alt={`Delivered order ${entry.billNumber}`} className="aspect-square w-full object-cover" loading="lazy" /></a>
+                        <button
+                          type="button"
+                          className="absolute right-2 top-2 rounded-full border bg-background/95 p-2 shadow-sm"
+                          aria-label={entry.favorite ? "Remove from favorites" : "Add to favorites"}
+                          title={entry.favorite ? "Remove from favorites" : "Add to favorites"}
+                          disabled={favoritePhotoId === entry.deliveryPhotoId}
+                          onClick={() => void toggleGalleryFavorite(entry)}
+                        >
+                          <Star className={`h-5 w-5 ${entry.favorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground"}`} />
+                        </button>
                         <figcaption className="p-3 text-xs"><p className="font-medium">{entry.customerName}</p><p className="text-muted-foreground">{entry.billNumber}</p>{entry.deliveredOn ? <p className="text-muted-foreground">Delivered {formatDate(entry.deliveredOn)}</p> : null}</figcaption>
                       </figure>
                     ))}
