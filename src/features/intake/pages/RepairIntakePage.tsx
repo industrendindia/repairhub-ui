@@ -364,7 +364,7 @@ const intakeSteps: IntakeStep[] = [...steps.map((entry) => entry.key), "billingH
 
 const navigationMenuItems = ["Home", "Repair Maintenance", "Employees", "Billing History", "Product Gallery", "Social Media", "WhatsApp Configuration"];
 const billingHistoryPageSize = 10;
-const maxImageSizeBytes = 1024 * 1024;
+const maxImageSizeBytes = 2 * 1024 * 1024;
 const maxSignatureSizeBytes = 150 * 1024;
 const defaultCakeOccasions = [
   "Birthday", "Anniversary", "Wedding", "Engagement", "Baby shower", "Naming ceremony",
@@ -1611,7 +1611,7 @@ export function RepairIntakePage() {
 
   const replaceCompanyLogo = async (companyCode: string, file: File) => {
     if (file.size > maxImageSizeBytes) {
-      window.alert("The company logo must be 1 MB or smaller.");
+      window.alert("The company logo must be 2 MB or smaller.");
       return;
     }
     if (!["image/png", "image/jpeg", "image/gif"].includes(file.type)) {
