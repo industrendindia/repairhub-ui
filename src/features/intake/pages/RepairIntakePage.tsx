@@ -2373,6 +2373,7 @@ export function RepairIntakePage() {
                     <FileUpload
                       label={cakeOrderFeaturesEnabled ? "Capture or upload cake print/reference photos" : "Capture or upload item photo"}
                       accept="image/*"
+                      capture="environment"
                       multiple
                       maxFileSizeBytes={maxImageSizeBytes}
                       onFilesChange={(files) => {
